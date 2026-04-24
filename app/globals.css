@@ -68,12 +68,12 @@ body {
 
 /* ─── App Shell ─────────────────────────────────────────────────────────────── */
 .app-shell {
-  display: flex;
-  flex-direction: column;
-  min-height: 100dvh;
-  max-width: 430px;
-  margin: 0 auto;
-  position: relative;
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    max-width: 430px;
+    margin: 0 auto;
+    position: relative;
 }
 
 .app-header {
@@ -90,11 +90,12 @@ body {
 }
 
 .app-content {
-  flex: 1;
-  overflow-y: auto;
-  padding-bottom: 80px;
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-bottom: 90px;
+    -webkit-overflow-scrolling: touch;
 }
-
 .app-nav {
   position: fixed;
   bottom: 0;
@@ -103,7 +104,7 @@ body {
   width: 100%;
   max-width: 430px;
   display: flex;
-  background: rgba(10, 15, 30, 0.95);
+  background: rgba(10,15,30,0.98);
   backdrop-filter: blur(20px);
   border-top: 1px solid var(--color-border);
   z-index: 50;

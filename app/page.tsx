@@ -1,5 +1,5 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useStore } from "@/store";
 import { useAuth } from "@/hooks/useAuth";
 import AppHeader from "@/components/layout/AppHeader";
@@ -21,29 +21,34 @@ export default function AppPage() {
   const { activeTab, setUserId, setUserName, loadSettings, initSpace, initSubscriptions } = useStore();
   const { user, loading } = useAuth();
   const Screen = SCREENS[activeTab] ?? DashboardScreen;
-  const { space } = useStore();
+  const unsubRef = useRef<(() => void) | null>(null);
+  const initializedRef = useRef(false);
 
   useEffect(() => {
-    if (!space) return;
-    const unsubscribe = initSubscriptions();
-    return () => unsubscribe();
-  }, [space?.id]);
-  useEffect(() => {
-    if (!user) return;
+    if (!user || initializedRef.current) return;
+    initializedRef.current = true;
 
     const userName = user.displayName ?? "Usuario";
     setUserId(user.uid);
     setUserName(userName);
-    loadSettings(user.uid);
 
-    let unsubscribe: (() => void) | undefined;
+    const init = async () => {
+      await loadSettings(user.uid);
+      await initSpace(user.uid, userName);
 
-    initSpace(user.uid, userName).then(() => {
-      unsubscribe = initSubscriptions();
-    });
+      // Limpiar subscripciones anteriores
+      if (unsubRef.current) unsubRef.current();
+      unsubRef.current = initSubscriptions();
+    };
+
+    init();
 
     return () => {
-      if (unsubscribe) unsubscribe();
+      if (unsubRef.current) {
+        unsubRef.current();
+        unsubRef.current = null;
+      }
+      initializedRef.current = false;
     };
   }, [user]);
 

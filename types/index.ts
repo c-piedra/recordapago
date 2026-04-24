@@ -69,3 +69,25 @@ export interface AppSettings {
     nombreUsuario: string;
     spaceId?: string;
 }
+export interface Compromiso {
+    id: string;
+    nombre: string;
+    categoria: CategoriaCompromiso;
+    monto: number;
+    frecuencia: FrecuenciaCompromiso;
+    proximaFecha: string;
+    diasAntes: number;
+    estado: EstadoCompromiso;
+    notas?: string;
+    color?: string;
+    icono?: string;
+    // ─── Tracker de deuda ─────────────────────────────────────
+    esDeuda?: boolean;
+    montoTotal?: number;
+    cuotasTotales?: number;
+    cuotasPagadas?: number;
+    fechaFinEstimada?: string;
+    // ──────────────────────────────────────────────────────────
+    creadoEn?: any;
+    actualizadoEn?: any;
+}

@@ -45,6 +45,7 @@ const SUGERENCIAS: { nombre: string; icono: string; categoria: string }[] = [
     { nombre: "ChatGPT", icono: "🤖", categoria: "suscripcion" },
     { nombre: "Gimnasio", icono: "💪", categoria: "suscripcion" },
     { nombre: "Gollo", icono: "🏪", categoria: "prestamo" },
+    { nombre: "Mexpress",        icono: "🛒", categoria: "prestamo" },
     { nombre: "Importadora", icono: "🏬", categoria: "prestamo" },
     { nombre: "Banco Nacional", icono: "🏦", categoria: "prestamo" },
     { nombre: "BAC", icono: "💳", categoria: "tarjeta" },
