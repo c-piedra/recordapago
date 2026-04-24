@@ -1,41 +1,91 @@
 import {
-    collection, doc, addDoc, updateDoc, deleteDoc, setDoc,
-    getDocs, onSnapshot, query, orderBy, serverTimestamp,
+    collection, doc, addDoc, updateDoc, deleteDoc, setDoc, getDoc,
+    getDocs, onSnapshot, query, orderBy, serverTimestamp, where,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import type { Compromiso, HistorialPago, AppSettings } from "@/types";
+import type { Compromiso, HistorialPago, AppSettings, Space } from "@/types";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const col = (name: string) => collection(db, name);
-
 const cleanData = (data: object) =>
-    Object.fromEntries(
-        Object.entries(data).filter(([_, v]) => v !== undefined)
-    );
+    Object.fromEntries(Object.entries(data).filter(([_, v]) => v !== undefined));
 
-// ─── Compromisos ──────────────────────────────────────────────────────────────
-export const compromisosService = {
-    async getAll(): Promise<Compromiso[]> {
-        const snap = await getDocs(query(col("compromisos"), orderBy("proximaFecha", "asc")));
-        return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Compromiso));
-    },
+const spaceCol = (spaceId: string, name: string) =>
+    collection(db, "spaces", spaceId, name);
 
-    async add(c: Omit<Compromiso, "id">): Promise<string> {
-        const ref = await addDoc(col("compromisos"), cleanData({ ...c, creadoEn: serverTimestamp() }));
+const spaceDoc = (spaceId: string, name: string, id: string) =>
+    doc(db, "spaces", spaceId, name, id);
+
+// ─── Spaces ───────────────────────────────────────────────────────────────────
+export const spacesService = {
+    async create(userId: string, userName: string): Promise<string> {
+        const inviteCode = Math.random().toString(36).slice(2, 8).toUpperCase();
+        const ref = await addDoc(collection(db, "spaces"), cleanData({
+            inviteCode,
+            createdBy: userId,
+            members: [userId],
+            memberNames: { [userId]: userName },
+            creadoEn: serverTimestamp(),
+        }));
         return ref.id;
     },
 
-    async update(id: string, data: Partial<Compromiso>): Promise<void> {
-        await updateDoc(doc(db, "compromisos", id), cleanData({ ...data, actualizadoEn: serverTimestamp() }));
+    async getByInviteCode(code: string): Promise<Space | null> {
+        const snap = await getDocs(
+            query(collection(db, "spaces"), where("inviteCode", "==", code.toUpperCase()))
+        );
+        if (snap.empty) return null;
+        return { id: snap.docs[0].id, ...snap.docs[0].data() } as Space;
     },
 
-    async delete(id: string): Promise<void> {
-        await deleteDoc(doc(db, "compromisos", id));
+    async get(spaceId: string): Promise<Space | null> {
+        const snap = await getDoc(doc(db, "spaces", spaceId));
+        if (!snap.exists()) return null;
+        return { id: snap.id, ...snap.data() } as Space;
     },
 
-    subscribe(callback: (compromisos: Compromiso[]) => void) {
+    async join(spaceId: string, userId: string, userName: string): Promise<void> {
+        await updateDoc(doc(db, "spaces", spaceId), {
+            members: [...(await spacesService.get(spaceId))?.members ?? [], userId],
+            [`memberNames.${userId}`]: userName,
+        });
+    },
+
+    async leave(spaceId: string, userId: string): Promise<void> {
+        const space = await spacesService.get(spaceId);
+        if (!space) return;
+        const members = space.members.filter((m) => m !== userId);
+        await updateDoc(doc(db, "spaces", spaceId), { members });
+    },
+
+    subscribe(spaceId: string, callback: (space: Space) => void) {
+        return onSnapshot(doc(db, "spaces", spaceId), (snap) => {
+            if (snap.exists()) callback({ id: snap.id, ...snap.data() } as Space);
+        });
+    },
+};
+
+// ─── Compromisos ──────────────────────────────────────────────────────────────
+export const compromisosService = {
+    async add(spaceId: string, c: Omit<Compromiso, "id">): Promise<string> {
+        const ref = await addDoc(spaceCol(spaceId, "compromisos"), cleanData({
+            ...c, creadoEn: serverTimestamp(),
+        }));
+        return ref.id;
+    },
+
+    async update(spaceId: string, id: string, data: Partial<Compromiso>): Promise<void> {
+        await updateDoc(spaceDoc(spaceId, "compromisos", id), cleanData({
+            ...data, actualizadoEn: serverTimestamp(),
+        }));
+    },
+
+    async delete(spaceId: string, id: string): Promise<void> {
+        await deleteDoc(spaceDoc(spaceId, "compromisos", id));
+    },
+
+    subscribe(spaceId: string, callback: (compromisos: Compromiso[]) => void) {
         return onSnapshot(
-            query(col("compromisos"), orderBy("proximaFecha", "asc")),
+            query(spaceCol(spaceId, "compromisos"), orderBy("proximaFecha", "asc")),
             (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Compromiso)))
         );
     },
@@ -43,23 +93,20 @@ export const compromisosService = {
 
 // ─── Historial ────────────────────────────────────────────────────────────────
 export const historialService = {
-    async getAll(): Promise<HistorialPago[]> {
-        const snap = await getDocs(query(col("historial"), orderBy("fecha", "desc")));
-        return snap.docs.map((d) => ({ id: d.id, ...d.data() } as HistorialPago));
-    },
-
-    async add(h: Omit<HistorialPago, "id">): Promise<string> {
-        const ref = await addDoc(col("historial"), cleanData({ ...h, creadoEn: serverTimestamp() }));
+    async add(spaceId: string, h: Omit<HistorialPago, "id">): Promise<string> {
+        const ref = await addDoc(spaceCol(spaceId, "historial"), cleanData({
+            ...h, creadoEn: serverTimestamp(),
+        }));
         return ref.id;
     },
 
-    async delete(id: string): Promise<void> {
-        await deleteDoc(doc(db, "historial", id));
+    async delete(spaceId: string, id: string): Promise<void> {
+        await deleteDoc(spaceDoc(spaceId, "historial", id));
     },
 
-    subscribe(callback: (historial: HistorialPago[]) => void) {
+    subscribe(spaceId: string, callback: (historial: HistorialPago[]) => void) {
         return onSnapshot(
-            query(col("historial"), orderBy("fecha", "desc")),
+            query(spaceCol(spaceId, "historial"), orderBy("fecha", "desc")),
             (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as HistorialPago)))
         );
     },
@@ -69,9 +116,9 @@ export const historialService = {
 export const settingsService = {
     async get(userId: string): Promise<Partial<AppSettings> | null> {
         try {
-            const snap = await getDocs(collection(db, "users", userId, "settings"));
-            if (snap.empty) return null;
-            return snap.docs[0].data() as Partial<AppSettings>;
+            const snap = await getDoc(doc(db, "users", userId, "settings", "main"));
+            if (!snap.exists()) return null;
+            return snap.data() as Partial<AppSettings>;
         } catch {
             return null;
         }
@@ -79,13 +126,35 @@ export const settingsService = {
 
     async save(userId: string, settings: Partial<AppSettings>): Promise<void> {
         try {
-            await updateDoc(doc(db, "users", userId, "settings", "main"), cleanData(settings));
-        } catch {
             await setDoc(
                 doc(db, "users", userId, "settings", "main"),
                 cleanData(settings),
                 { merge: true }
             );
+        } catch (err) {
+            console.error("Error guardando settings:", err);
         }
+    },
+};
+
+// ─── Push subscriptions ───────────────────────────────────────────────────────
+export const pushService = {
+    async save(userId: string, subscription: object): Promise<void> {
+        await setDoc(doc(db, "pushSubscriptions", userId), {
+            subscription, userId, creadoEn: new Date().toISOString(),
+        });
+    },
+
+    async getBySpaceId(spaceId: string): Promise<{ userId: string; subscription: any }[]> {
+        const space = await spacesService.get(spaceId);
+        if (!space) return [];
+        const results = await Promise.all(
+            space.members.map(async (userId) => {
+                const snap = await getDoc(doc(db, "pushSubscriptions", userId));
+                if (!snap.exists()) return null;
+                return { userId, subscription: snap.data().subscription };
+            })
+        );
+        return results.filter(Boolean) as { userId: string; subscription: any }[];
     },
 };
