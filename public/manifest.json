@@ -1,0 +1,22 @@
+{
+    "name": "RecordaPago",
+    "short_name": "RecordaPago",
+    "description": "No te quedés sin luz, sin agua, ni con Gollo en la puerta",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#0A0F1E",
+    "theme_color": "#0A0F1E",
+    "orientation": "portrait",
+    "icons": [
+        {
+            "src": "/icons/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "/icons/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}
