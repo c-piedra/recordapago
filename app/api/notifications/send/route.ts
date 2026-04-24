@@ -15,6 +15,7 @@ export async function POST(req: NextRequest) {
     }
 
     try {
+        // Obtener todas las suscripciones
         const subsSnap = await adminDb.collection("pushSubscriptions").get();
         if (subsSnap.empty) {
             return NextResponse.json({ ok: true, message: "Sin suscriptores" });
@@ -25,26 +26,33 @@ export async function POST(req: NextRequest) {
         for (const subDoc of subsSnap.docs) {
             const { subscription, userId } = subDoc.data();
 
-            // Leer compromisos del usuario
+            // Obtener spaceId del usuario
+            const settingsSnap = await adminDb
+                .collection("users").doc(userId)
+                .collection("settings").doc("main").get();
+
+            const spaceId = settingsSnap.exists ? settingsSnap.data()?.spaceId : null;
+            if (!spaceId) continue;
+
+            // Obtener compromisos del space
+            const hoy = new Date();
+            hoy.setHours(0, 0, 0, 0);
+            const hoyStr = hoy.toISOString().split("T")[0];
+
             const compSnap = await adminDb
+                .collection("spaces").doc(spaceId)
                 .collection("compromisos")
                 .where("estado", "==", "activo")
                 .get();
 
-            const hoy = new Date();
-            hoy.setHours(0, 0, 0, 0);
+            const compromisos = compSnap.docs.map((d) => d.data());
 
-            const proximos = compSnap.docs
-                .map((d) => d.data())
-                .filter((c) => {
-                    const fecha = new Date(c.proximaFecha + "T00:00:00");
-                    const diff = Math.round((fecha.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
-                    return diff >= 0 && diff <= (c.diasAntes ?? 3);
-                });
-
-            const vencidos = compSnap.docs
-                .map((d) => d.data())
-                .filter((c) => c.proximaFecha < hoy.toISOString().split("T")[0]);
+            const vencidos = compromisos.filter((c) => c.proximaFecha < hoyStr);
+            const proximos = compromisos.filter((c) => {
+                const fecha = new Date(c.proximaFecha + "T00:00:00");
+                const diff = Math.round((fecha.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+                return diff >= 0 && diff <= (c.diasAntes ?? 3);
+            });
 
             const notifications: { title: string; body: string }[] = [];
 
@@ -59,7 +67,7 @@ export async function POST(req: NextRequest) {
                 const nombres = proximos.slice(0, 2).map((c) => c.nombre).join(", ");
                 notifications.push({
                     title: "💳 Pagos próximos",
-                    body: `${nombres}${proximos.length > 2 ? ` y ${proximos.length - 2} más` : ""} vencen pronto. No te quedés sin luz 💡`,
+                    body: `${nombres}${proximos.length > 2 ? ` y ${proximos.length - 2} más` : ""} vence${proximos.length > 1 ? "n" : ""} pronto`,
                 });
             }
 
@@ -67,7 +75,8 @@ export async function POST(req: NextRequest) {
                 try {
                     await webpush.sendNotification(subscription, JSON.stringify(notif));
                     sent++;
-                } catch {
+                } catch (err) {
+                    console.error("Error enviando:", err);
                     failed++;
                 }
             }
@@ -78,7 +87,7 @@ export async function POST(req: NextRequest) {
         console.error("Error:", error);
         return NextResponse.json({ error: "Error interno" }, { status: 500 });
     }
-}   
+}
 
 export async function GET(req: NextRequest) {
     return POST(req);
