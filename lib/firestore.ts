@@ -1,6 +1,6 @@
 import {
     collection, doc, addDoc, updateDoc, deleteDoc, setDoc,
-    getDocs, onSnapshot, query, orderBy, serverTimestamp,
+    getDocs, onSnapshot, query, getDoc, orderBy, serverTimestamp,
 } from "firebase/firestore";
 import { db } from "./firebase";
 import type { Compromiso, HistorialPago, AppSettings } from "@/types";
@@ -69,9 +69,10 @@ export const historialService = {
 export const settingsService = {
     async get(userId: string): Promise<Partial<AppSettings> | null> {
         try {
-            const snap = await getDocs(collection(db, "users", userId, "settings"));
-            if (snap.empty) return null;
-            return snap.docs[0].data() as Partial<AppSettings>;
+            const ref = doc(db, "users", userId, "settings", "main");
+            const snap = await getDoc(ref);
+            if (!snap.exists()) return null;
+            return snap.data() as Partial<AppSettings>;
         } catch {
             return null;
         }
@@ -79,13 +80,10 @@ export const settingsService = {
 
     async save(userId: string, settings: Partial<AppSettings>): Promise<void> {
         try {
-            await updateDoc(doc(db, "users", userId, "settings", "main"), cleanData(settings));
-        } catch {
-            await setDoc(
-                doc(db, "users", userId, "settings", "main"),
-                cleanData(settings),
-                { merge: true }
-            );
+            const ref = doc(db, "users", userId, "settings", "main");
+            await setDoc(ref, cleanData(settings), { merge: true });
+        } catch (err) {
+            console.error("Error guardando settings:", err);
         }
     },
 };
