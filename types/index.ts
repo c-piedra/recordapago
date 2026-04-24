@@ -41,6 +41,18 @@ export interface HistorialPago {
     fecha: string;
     notas?: string;
     referencia?: string;
+    comprobante?: string;
+    pagadoPor?: string;
+    pagadoPorNombre?: string;
+    creadoEn?: any;
+}
+
+export interface Space {
+    id: string;
+    inviteCode: string;
+    createdBy: string;
+    members: string[];
+    memberNames: Record<string, string>;
     creadoEn?: any;
 }
 
@@ -55,15 +67,5 @@ export interface AppSettings {
     notificacionesPush: boolean;
     diasAntesPorDefecto: number;
     nombreUsuario: string;
-}
-export interface HistorialPago {
-    id: string;
-    compromisoId: string;
-    compromisoNombre: string;
-    monto: number;
-    fecha: string;
-    notas?: string;
-    referencia?: string;
-    comprobante?: string;
-    creadoEn?: any;
+    spaceId?: string;
 }

@@ -18,19 +18,35 @@ const SCREENS: Record<string, React.ComponentType> = {
 };
 
 export default function AppPage() {
-  const { activeTab, setUserId, loadSettings, initSubscriptions } = useStore();
+  const { activeTab, setUserId, setUserName, loadSettings, initSpace, initSubscriptions } = useStore();
   const { user, loading } = useAuth();
   const Screen = SCREENS[activeTab] ?? DashboardScreen;
+  const { space } = useStore();
 
   useEffect(() => {
-    if (!user) return;
-    setUserId(user.uid);
-    loadSettings(user.uid);
+    if (!space) return;
     const unsubscribe = initSubscriptions();
     return () => unsubscribe();
+  }, [space?.id]);
+  useEffect(() => {
+    if (!user) return;
+
+    const userName = user.displayName ?? "Usuario";
+    setUserId(user.uid);
+    setUserName(userName);
+    loadSettings(user.uid);
+
+    let unsubscribe: (() => void) | undefined;
+
+    initSpace(user.uid, userName).then(() => {
+      unsubscribe = initSubscriptions();
+    });
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, [user]);
 
-  // Loading
   if (loading) {
     return (
       <div style={{
