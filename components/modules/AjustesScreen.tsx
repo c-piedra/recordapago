@@ -272,7 +272,7 @@ export default function AjustesScreen() {
                 )}
             </div>
 
-            {/* Info app */}
+
             <div className="card" style={{ textAlign: "center" }}>
                 <p style={{ fontSize: 32, marginBottom: "var(--space-2)" }}>💳</p>
                 <p style={{ fontFamily: "var(--font-display)", fontWeight: 700, color: "var(--color-text)", marginBottom: 4 }}>
