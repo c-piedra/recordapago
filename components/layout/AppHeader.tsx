@@ -25,9 +25,6 @@ export default function AppHeader() {
             <>
                 <header className="app-header">
                     <div>
-                        <div style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)" }}>
-                            Hola, {settings.nombreUsuario || "usuario"} 👋
-                        </div>
                         <div style={{
                             fontFamily: "var(--font-display)",
                             fontWeight: 800,

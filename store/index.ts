@@ -48,7 +48,18 @@ interface AppStore {
 }
 
 const uid = () => Math.random().toString(36).slice(2, 10);
-
+const calcMensual = (monto: number, frecuencia: string): number => {
+    switch (frecuencia) {
+        case "semanal": return monto * 4.33;
+        case "quincenal": return monto * 2;
+        case "mensual": return monto;
+        case "bimestral": return monto / 2;
+        case "trimestral": return monto / 3;
+        case "semestral": return monto / 6;
+        case "anual": return monto / 12;
+        default: return monto;
+    }
+};
 export const useStore = create<AppStore>()((set, get) => ({
     compromisos: [],
     historial: [],
@@ -218,7 +229,7 @@ export const useStore = create<AppStore>()((set, get) => ({
         const endOfMonth = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).toISOString().split("T")[0];
         const activos = compromisos.filter((c) => c.estado === "activo");
         return {
-            totalMensual: activos.reduce((s, c) => s + c.monto, 0),
+            totalMensual: activos.reduce((s, c) => s + calcMensual(c.monto, c.frecuencia), 0),
             proximosVencer: activos.filter((c) => {
                 const dias = Math.round((new Date(c.proximaFecha + "T00:00:00").getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
                 return dias >= 0 && dias <= 5;
@@ -240,7 +251,7 @@ export const useStore = create<AppStore>()((set, get) => ({
         const { compromisos, settings } = get();
         const activos = compromisos.filter((c) => c.estado === "activo");
         const salarioMensual = settings.perfil?.salarioMensual ?? 0;
-        const totalCompromisos = activos.reduce((s, c) => s + c.monto, 0);
+        const totalCompromisos = activos.reduce((s, c) => s + calcMensual(c.monto, c.frecuencia), 0);
         const porcentajeGastado = salarioMensual > 0
             ? Math.round((totalCompromisos / salarioMensual) * 100)
             : 0;
