@@ -4,6 +4,9 @@ export type CategoriaCompromiso =
     | "tarjeta"
     | "servicio"
     | "alquiler"
+    | "salud"
+    | "mascotas"
+    | "educacion"
     | "otro";
 
 export type FrecuenciaCompromiso =

@@ -12,6 +12,9 @@ const CATEGORIA_OPTIONS = [
     { value: "tarjeta", label: "💳 Tarjeta" },
     { value: "servicio", label: "⚡ Servicio" },
     { value: "alquiler", label: "🏠 Alquiler" },
+    { value: "salud", label: "🏥 Salud" },
+    { value: "mascotas", label: "🐾 Mascotas" },
+    { value: "educacion", label: "📚 Educación" },
     { value: "otro", label: "📋 Otro" },
 ];
 
@@ -45,7 +48,7 @@ const SUGERENCIAS: { nombre: string; icono: string; categoria: string }[] = [
     { nombre: "ChatGPT", icono: "🤖", categoria: "suscripcion" },
     { nombre: "Gimnasio", icono: "💪", categoria: "suscripcion" },
     { nombre: "Gollo", icono: "🏪", categoria: "prestamo" },
-    { nombre: "Mexpress",        icono: "🛒", categoria: "prestamo" },
+    { nombre: "Mexpress", icono: "🛒", categoria: "prestamo" },
     { nombre: "Importadora", icono: "🏬", categoria: "prestamo" },
     { nombre: "Banco Nacional", icono: "🏦", categoria: "prestamo" },
     { nombre: "BAC", icono: "💳", categoria: "tarjeta" },
@@ -60,6 +63,24 @@ const SUGERENCIAS: { nombre: string; icono: string; categoria: string }[] = [
     { nombre: "Teléfono", icono: "📱", categoria: "servicio" },
     { nombre: "Alquiler", icono: "🏠", categoria: "alquiler" },
     { nombre: "Condominio", icono: "🏢", categoria: "alquiler" },
+    // Salud
+    { nombre: "Medicamentos", icono: "💊", categoria: "salud" },
+    { nombre: "Seguro médico", icono: "🏥", categoria: "salud" },
+    { nombre: "Cita médica", icono: "👨‍⚕️", categoria: "salud" },
+    { nombre: "Vitaminas", icono: "💊", categoria: "salud" },
+    { nombre: "Farmacia", icono: "💊", categoria: "salud" },
+    // Mascotas
+    { nombre: "Concentrado", icono: "🐾", categoria: "mascotas" },
+    { nombre: "Veterinario", icono: "🐕", categoria: "mascotas" },
+    { nombre: "Vacuna mascota", icono: "💉", categoria: "mascotas" },
+    { nombre: "Guardería mascota", icono: "🏠", categoria: "mascotas" },
+    { nombre: "Arena gato", icono: "🐱", categoria: "mascotas" },
+    // Educación
+    { nombre: "Colegio", icono: "📚", categoria: "educacion" },
+    { nombre: "Universidad", icono: "🎓", categoria: "educacion" },
+    { nombre: "Curso online", icono: "💻", categoria: "educacion" },
+    { nombre: "Inglés", icono: "🗣️", categoria: "educacion" },
+    { nombre: "Transporte escolar", icono: "🚌", categoria: "educacion" },
     { nombre: "Seguro", icono: "🛡️", categoria: "otro" },
 ];
 
@@ -83,24 +104,23 @@ export default function CompromisosScreen() {
         nombre: "", categoria: "suscripcion", monto: "",
         frecuencia: "mensual", proximaFecha: "",
         diasAntes: String(settings.diasAntesPorDefecto ?? 3),
-        notas: "", icono: "",
+        notas: "", icono: "", categoriaPersonalizada: "",
     });
 
     const activos = compromisos.filter((c) => c.estado === "activo");
     const pausados = compromisos.filter((c) => c.estado === "pausado");
     const shown = tab === "activos" ? activos : pausados;
     const [showPago, setShowPago] = useState<Compromiso | null>(null);
-const [pagoForm, setPagoForm] = useState({ notas: "", referencia: "", comprobante: "" });
+    const [pagoForm, setPagoForm] = useState({ notas: "", referencia: "", comprobante: "" });
     const resetForm = () => {
         setErrors({});
         setForm({
             nombre: "", categoria: "suscripcion", monto: "",
             frecuencia: "mensual", proximaFecha: "",
             diasAntes: String(settings.diasAntesPorDefecto ?? 3),
-            notas: "", icono: "",
+            notas: "", icono: "", categoriaPersonalizada: "",
         });
     };
-
     const handleSubmit = () => {
         const newErrors: Record<string, boolean> = {};
         if (!form.nombre) newErrors.nombre = true;
@@ -117,7 +137,7 @@ const [pagoForm, setPagoForm] = useState({ notas: "", referencia: "", comprobant
             proximaFecha: form.proximaFecha,
             diasAntes: parseInt(form.diasAntes),
             estado: "activo",
-            notas: form.notas || undefined,
+            notas: form.categoriaPersonalizada || form.notas || undefined,
             icono: form.icono || undefined,
         });
         resetForm();
@@ -344,10 +364,10 @@ const [pagoForm, setPagoForm] = useState({ notas: "", referencia: "", comprobant
                                     setSugerencias(
                                         val.length > 0
                                             ? SUGERENCIAS.filter((s) => s.nombre.toLowerCase().includes(val.toLowerCase())).slice(0, 5)
-                                            : SUGERENCIAS.slice(0, 6)
+                                            : SUGERENCIAS
                                     );
                                 }}
-                                onFocus={() => setSugerencias(SUGERENCIAS.slice(0, 6))}
+                                onFocus={() => setSugerencias(SUGERENCIAS)}
                                 onBlur={() => setTimeout(() => setSugerencias([]), 150)}
                             />
                             {sugerencias.length > 0 && (
@@ -357,29 +377,62 @@ const [pagoForm, setPagoForm] = useState({ notas: "", referencia: "", comprobant
                                     background: "var(--color-bg-elevated)",
                                     border: "1px solid var(--color-border-2)",
                                     borderRadius: "var(--radius-md)",
-                                    zIndex: 100, overflow: "hidden",
+                                    zIndex: 100,
+                                    maxHeight: 280,
+                                    overflowY: "auto",
                                 }}>
-                                    {sugerencias.map((s) => (
-                                        <button
-                                            key={s.nombre}
-                                            style={{
-                                                width: "100%", textAlign: "left",
-                                                padding: "10px var(--space-4)",
-                                                background: "transparent", border: "none",
-                                                borderBottom: "1px solid var(--color-border)",
-                                                color: "var(--color-text)", cursor: "pointer",
-                                                display: "flex", alignItems: "center",
-                                                gap: "var(--space-3)", fontSize: "var(--text-sm)",
-                                            }}
-                                            onMouseDown={() => {
-                                                setForm({ ...form, nombre: s.nombre, icono: s.icono, categoria: s.categoria });
-                                                setSugerencias([]);
-                                            }}
-                                        >
-                                            <span style={{ fontSize: 20 }}>{s.icono}</span>
-                                            {s.nombre}
-                                        </button>
-                                    ))}
+                                    {/* Categorías agrupadas */}
+                                    {["suscripcion", "prestamo", "tarjeta", "servicio", "alquiler", "salud", "mascotas", "educacion", "otro"].map((cat) => {
+                                        const items = sugerencias.filter((s) => s.categoria === cat);
+                                        if (items.length === 0) return null;
+                                        const catLabels: Record<string, string> = {
+                                            suscripcion: "📺 Suscripciones",
+                                            prestamo: "🏦 Préstamos",
+                                            tarjeta: "💳 Tarjetas",
+                                            servicio: "⚡ Servicios",
+                                            alquiler: "🏠 Alquiler",
+                                            salud: "🏥 Salud",
+                                            mascotas: "🐾 Mascotas",
+                                            educacion: "📚 Educación",
+                                            otro: "📋 Otro",
+                                        };
+                                        return (
+                                            <div key={cat}>
+                                                <p style={{
+                                                    padding: "6px var(--space-4) 2px",
+                                                    fontSize: "var(--text-xs)",
+                                                    color: "var(--color-primary)",
+                                                    fontWeight: 700,
+                                                    letterSpacing: "0.08em",
+                                                    textTransform: "uppercase",
+                                                    background: "var(--color-bg-card)",
+                                                }}>
+                                                    {catLabels[cat]}
+                                                </p>
+                                                {items.map((s) => (
+                                                    <button
+                                                        key={s.nombre}
+                                                        style={{
+                                                            width: "100%", textAlign: "left",
+                                                            padding: "10px var(--space-4)",
+                                                            background: "transparent", border: "none",
+                                                            borderBottom: "1px solid var(--color-border)",
+                                                            color: "var(--color-text)", cursor: "pointer",
+                                                            display: "flex", alignItems: "center",
+                                                            gap: "var(--space-3)", fontSize: "var(--text-sm)",
+                                                        }}
+                                                        onMouseDown={() => {
+                                                            setForm({ ...form, nombre: s.nombre, icono: s.icono, categoria: s.categoria });
+                                                            setSugerencias([]);
+                                                        }}
+                                                    >
+                                                        <span style={{ fontSize: 20 }}>{s.icono}</span>
+                                                        {s.nombre}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             )}
                         </div>
@@ -390,7 +443,17 @@ const [pagoForm, setPagoForm] = useState({ notas: "", referencia: "", comprobant
                         onChange={(v) => setForm({ ...form, categoria: v })}
                         options={CATEGORIA_OPTIONS} required
                     />
-
+                    {form.categoria === "otro" && (
+                        <div className="input-group">
+                            <label className="input-label">¿Qué tipo de gasto es?</label>
+                            <input
+                                className="input"
+                                value={form.categoriaPersonalizada}
+                                onChange={(e) => setForm({ ...form, categoriaPersonalizada: e.target.value })}
+                                placeholder="Ej: Hobby, Deporte, Religión..."
+                            />
+                        </div>
+                    )}
                     <div className="input-group">
                         <label className="input-label" style={{ color: errors.monto ? "var(--color-danger)" : "var(--color-primary)" }}>
                             Monto (₡) {errors.monto && "— requerido"} *

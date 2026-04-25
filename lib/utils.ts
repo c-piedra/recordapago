@@ -51,6 +51,9 @@ export const CATEGORIA_LABEL: Record<CategoriaCompromiso, string> = {
     tarjeta: "Tarjeta",
     servicio: "Servicio",
     alquiler: "Alquiler",
+    salud: "Salud",
+    mascotas: "Mascotas",
+    educacion: "Educación",
     otro: "Otro",
 };
 
@@ -71,6 +74,9 @@ export const CATEGORIA_ICONO: Record<CategoriaCompromiso, string> = {
     tarjeta: "💳",
     servicio: "⚡",
     alquiler: "🏠",
+    salud: "🏥",
+    mascotas: "🐾",
+    educacion: "📚",
     otro: "📋",
 };
 
