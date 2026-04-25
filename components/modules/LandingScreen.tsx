@@ -210,22 +210,6 @@ export default function LandingScreen({ onStart, onLogin }: {
                     ))}
                 </div>
 
-                {/* CTA final */}
-                <button
-                    onClick={onStart}
-                    style={{
-                        background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
-                        color: "#fff", border: "none",
-                        borderRadius: 99, padding: "16px 40px",
-                        fontSize: "var(--text-base)", fontWeight: 700,
-                        cursor: "pointer",
-                        boxShadow: "0 4px 24px rgba(99,102,241,0.4)",
-                        width: "100%",
-                    }}
-                >
-                    🚀 Empezar gratis
-                </button>
-
                 <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)", textAlign: "center", marginTop: "var(--space-4)" }}>
                     RecordaPago · Hecho con ❤️ en Costa Rica 🇨🇷
                 </p>
