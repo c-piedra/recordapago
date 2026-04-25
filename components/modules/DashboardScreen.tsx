@@ -4,7 +4,7 @@ import { fmt, fmtDate, diasHasta, diasHastaNum, getUrgenciaColor, CATEGORIA_ICON
 import { UrgenciaBadge } from "@/components/ui";
 
 export default function DashboardScreen() {
-    const { compromisos, getDashboardStats, setActiveTab, settings } = useStore();
+    const { compromisos, getDashboardStats, setActiveTab, setCategoriaAbierta, settings } = useStore();
     const stats = getDashboardStats();
 
     const hoy = new Date();
@@ -13,9 +13,15 @@ export default function DashboardScreen() {
     const nombre = settings.nombreUsuario || "usuario";
 
     const activos = compromisos.filter((c) => c.estado === "activo");
+    hoy.setHours(0, 0, 0, 0);
+
     const proximos = activos
-        .sort((a, b) => a.proximaFecha.localeCompare(b.proximaFecha))
-        .slice(0, 5);
+        .filter((c) => {
+            const fecha = new Date(c.proximaFecha + "T00:00:00");
+            const dias = Math.round((fecha.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+            return dias <= (c.diasAntes ?? 3);
+        })
+        .sort((a, b) => a.proximaFecha.localeCompare(b.proximaFecha));
 
     const urgentes = activos.filter((c) => diasHastaNum(c.proximaFecha) <= 5);
 
@@ -182,7 +188,10 @@ export default function DashboardScreen() {
                             return (
                                 <div
                                     key={c.id}
-                                    onClick={() => setActiveTab("compromisos")}
+                                    onClick={() => {
+                                        setCategoriaAbierta(c.categoria);
+                                        setActiveTab("compromisos");
+                                    }}
                                     style={{
                                         background: "var(--color-bg-card)",
                                         border: "1px solid var(--color-border)",

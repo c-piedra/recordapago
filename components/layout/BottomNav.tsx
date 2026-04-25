@@ -1,11 +1,11 @@
 "use client";
 import { useStore } from "@/store";
-import { LayoutDashboard, CreditCard, History, Settings } from "lucide-react";
+import { LayoutDashboard, CreditCard, TrendingUp, Settings } from "lucide-react";
 
 const NAV_ITEMS = [
     { id: "dashboard", label: "Inicio", Icon: LayoutDashboard },
-    { id: "compromisos", label: "Compromisos", Icon: CreditCard },
-    { id: "historial", label: "Historial", Icon: History },
+    { id: "compromisos", label: "Pagos", Icon: CreditCard },
+    { id: "finanzas", label: "Finanzas", Icon: TrendingUp },
     { id: "ajustes", label: "Ajustes", Icon: Settings },
 ];
 

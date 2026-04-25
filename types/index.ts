@@ -94,3 +94,20 @@ export interface Compromiso {
     creadoEn?: any;
     actualizadoEn?: any;
 }
+
+export type FrecuenciaSalario = "semanal" | "quincenal" | "mensual";
+
+export interface PerfilFinanciero {
+    salario: number;
+    frecuenciaSalario: FrecuenciaSalario;
+    salarioMensual: number; // calculado automáticamente
+    meta?: number; // % máximo a gastar en compromisos
+}
+
+export interface AppSettings {
+    notificacionesPush: boolean;
+    diasAntesPorDefecto: number;
+    nombreUsuario: string;
+    spaceId?: string;
+    perfil?: PerfilFinanciero;
+}

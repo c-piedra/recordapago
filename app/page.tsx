@@ -9,14 +9,14 @@ import DashboardScreen from "@/components/modules/DashboardScreen";
 import CompromisosScreen from "@/components/modules/CompromisosScreen";
 import HistorialScreen from "@/components/modules/HistorialScreen";
 import AjustesScreen from "@/components/modules/AjustesScreen";
-
+import FinanzasScreen from "@/components/modules/FinanzasScreen";
 const SCREENS: Record<string, React.ComponentType> = {
   dashboard: DashboardScreen,
   compromisos: CompromisosScreen,
+  finanzas: FinanzasScreen,
   historial: HistorialScreen,
   ajustes: AjustesScreen,
 };
-
 export default function AppPage() {
   const { activeTab, setUserId, setUserName, loadSettings, initSpace, initSubscriptions } = useStore();
   const { user, loading } = useAuth();

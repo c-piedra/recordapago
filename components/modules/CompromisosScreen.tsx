@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useStore } from "@/store";
 import { fmt, fmtDate, diasHasta, diasHastaNum, getUrgenciaColor, CATEGORIA_LABEL, CATEGORIA_ICONO, FRECUENCIA_LABEL } from "@/lib/utils";
 import { Badge, UrgenciaBadge, Sheet, Select, EmptyState, ConfirmDialog } from "@/components/ui";
@@ -86,8 +86,7 @@ const SUGERENCIAS: { nombre: string; icono: string; categoria: string }[] = [
 
 
 export default function CompromisosScreen() {
-    const { compromisos, addCompromiso, updateCompromiso, deleteCompromiso, marcarPagado, settings } = useStore();
-    const [errors, setErrors] = useState<Record<string, boolean>>({});
+    const { compromisos, addCompromiso, updateCompromiso, deleteCompromiso, marcarPagado, settings, categoriaAbierta, setCategoriaAbierta } = useStore(); const [errors, setErrors] = useState<Record<string, boolean>>({});
     const [sugerencias, setSugerencias] = useState<typeof SUGERENCIAS>([]);
     const [tab, setTab] = useState<"activos" | "pausados">("activos");
     const [showForm, setShowForm] = useState(false);
@@ -106,6 +105,7 @@ export default function CompromisosScreen() {
         diasAntes: String(settings.diasAntesPorDefecto ?? 3),
         notas: "", icono: "", categoriaPersonalizada: "",
     });
+    const [categoriasColapsadas, setCategoriasColapsadas] = useState<Record<string, boolean>>({});
 
     const activos = compromisos.filter((c) => c.estado === "activo");
     const pausados = compromisos.filter((c) => c.estado === "pausado");
@@ -183,6 +183,20 @@ export default function CompromisosScreen() {
         setPagoForm({ notas: "", referencia: "", comprobante: "" });
         setShowPago(null);
     };
+
+
+    const toggleCategoria = (cat: string) => {
+        setCategoriasColapsadas((prev) => ({
+            ...prev,
+            [cat]: prev[cat] === undefined ? false : !prev[cat]
+        }));
+    };
+    useEffect(() => {
+        if (categoriaAbierta) {
+            setCategoriasColapsadas((prev) => ({ ...prev, [categoriaAbierta]: false }));
+            setCategoriaAbierta(null);
+        }
+    }, [categoriaAbierta]);
     return (
         <div className="page fade-in">
 
@@ -209,63 +223,135 @@ export default function CompromisosScreen() {
                     sub={tab === "activos" ? "Agregá tus pagos recurrentes" : ""}
                 />
             ) : (
-                shown.map((c) => {
-                    const dias = diasHastaNum(c.proximaFecha);
-                    const color = getUrgenciaColor(dias);
-                    return (
-                        <div
-                            key={c.id}
-                            className="card"
-                            style={{ cursor: "pointer", borderLeft: `3px solid ${color}` }}
-                            onClick={() => setSelected(c)}
-                        >
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "var(--space-3)" }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
-                                    <div style={{
-                                        width: 48, height: 48,
-                                        borderRadius: "var(--radius-md)",
+                (() => {
+                    const porCategoria = shown.reduce<Record<string, Compromiso[]>>((acc, c) => {
+                        if (!acc[c.categoria]) acc[c.categoria] = [];
+                        acc[c.categoria].push(c);
+                        return acc;
+                    }, {});
+
+                    return Object.entries(porCategoria).map(([cat, items]) => {
+                        const colapsado = categoriasColapsadas[cat] ?? true;
+                        const totalCat = items.reduce((s, c) => s + c.monto, 0);
+
+                        return (
+                            <div key={cat}>
+                                <button
+                                    onClick={() => toggleCategoria(cat)}
+                                    style={{
+                                        width: "100%", display: "flex",
+                                        justifyContent: "space-between", alignItems: "center",
                                         background: "var(--color-bg-elevated)",
-                                        display: "grid", placeItems: "center",
-                                        fontSize: 24, border: "1px solid var(--color-border)",
+                                        border: "1px solid var(--color-border)",
+                                        borderRadius: colapsado ? "var(--radius-lg)" : "var(--radius-lg) var(--radius-lg) 0 0",
+                                        padding: "var(--space-3) var(--space-4)",
+                                        cursor: "pointer",
+                                        transition: "border-radius 0.2s",
+                                        marginBottom: 0,
+                                    }}
+                                >
+                                    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+                                        <span style={{ fontSize: 20 }}>
+                                            {CATEGORIA_ICONO[cat as keyof typeof CATEGORIA_ICONO] ?? "📋"}
+                                        </span>
+                                        <div style={{ textAlign: "left" }}>
+                                            <p style={{ fontWeight: 700, fontSize: "var(--text-sm)", color: "var(--color-text)" }}>
+                                                {CATEGORIA_LABEL[cat as keyof typeof CATEGORIA_LABEL] ?? cat}
+                                            </p>
+                                            <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)" }}>
+                                                {items.length} compromiso{items.length > 1 ? "s" : ""}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+                                        <p style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "var(--text-sm)", color: "var(--color-text)" }}>
+                                            {fmt(totalCat)}
+                                        </p>
+                                        <span style={{
+                                            fontSize: 12, color: "var(--color-text-3)",
+                                            transform: colapsado ? "rotate(0deg)" : "rotate(180deg)",
+                                            transition: "transform 0.2s",
+                                            display: "inline-block",
+                                        }}>
+                                            ▼
+                                        </span>
+                                    </div>
+                                </button>
+
+                                {!colapsado && (
+                                    <div style={{
+                                        border: "1px solid var(--color-border)",
+                                        borderTop: "none",
+                                        borderRadius: "0 0 var(--radius-lg) var(--radius-lg)",
+                                        overflow: "hidden",
+                                        marginBottom: "var(--space-3)",
                                     }}>
-                                        {c.icono ?? CATEGORIA_ICONO[c.categoria]}
+                                        {items.map((c, idx) => {
+                                            const dias = diasHastaNum(c.proximaFecha);
+                                            const color = getUrgenciaColor(dias);
+                                            return (
+                                                <div
+                                                    key={c.id}
+                                                    style={{
+                                                        cursor: "pointer",
+                                                        borderLeft: `3px solid ${color}`,
+                                                        borderBottom: idx < items.length - 1 ? "1px solid var(--color-border)" : "none",
+                                                        padding: "var(--space-3) var(--space-4)",
+                                                        background: "var(--color-bg-card)",
+                                                    }}
+                                                    onClick={() => setSelected(c)}
+                                                >
+                                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "var(--space-2)" }}>
+                                                        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+                                                            <div style={{
+                                                                width: 40, height: 40,
+                                                                borderRadius: "var(--radius-md)",
+                                                                background: "var(--color-bg-elevated)",
+                                                                display: "grid", placeItems: "center",
+                                                                fontSize: 20, border: "1px solid var(--color-border)",
+                                                            }}>
+                                                                {c.icono ?? CATEGORIA_ICONO[c.categoria]}
+                                                            </div>
+                                                            <div>
+                                                                <p style={{ fontWeight: 700, fontSize: "var(--text-sm)", color: "var(--color-text)" }}>
+                                                                    {c.nombre}
+                                                                </p>
+                                                                <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)", marginTop: 2 }}>
+                                                                    {FRECUENCIA_LABEL[c.frecuencia]}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <div style={{ textAlign: "right" }}>
+                                                            <p style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "var(--text-base)", color: "var(--color-text)" }}>
+                                                                {fmt(c.monto)}
+                                                            </p>
+                                                            <UrgenciaBadge dias={dias} />
+                                                        </div>
+                                                    </div>
+                                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                                        <p style={{ fontSize: "var(--text-xs)", color }}>
+                                                            {diasHasta(c.proximaFecha)} · {fmtDate(c.proximaFecha)}
+                                                        </p>
+                                                    </div>
+                                                    <div style={{
+                                                        height: 3, borderRadius: 2, marginTop: "var(--space-2)",
+                                                        background: `${color}22`, overflow: "hidden",
+                                                    }}>
+                                                        <div style={{
+                                                            height: "100%",
+                                                            width: dias <= 0 ? "100%" : `${Math.max(5, 100 - (dias / 30) * 100)}%`,
+                                                            background: color, borderRadius: 2,
+                                                        }} />
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
-                                    <div>
-                                        <p style={{ fontWeight: 700, fontSize: "var(--text-base)", color: "var(--color-text)" }}>
-                                            {c.nombre}
-                                        </p>
-                                        <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)", marginTop: 2 }}>
-                                            {CATEGORIA_LABEL[c.categoria]} · {FRECUENCIA_LABEL[c.frecuencia]}
-                                        </p>
-                                    </div>
-                                </div>
-                                <div style={{ textAlign: "right" }}>
-                                    <p style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "var(--text-lg)", color: "var(--color-text)" }}>
-                                        {fmt(c.monto)}
-                                    </p>
-                                    <UrgenciaBadge dias={dias} />
-                                </div>
+                                )}
                             </div>
-
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                <p style={{ fontSize: "var(--text-xs)", color }}>
-                                    {diasHasta(c.proximaFecha)} · {fmtDate(c.proximaFecha)}
-                                </p>
-                            </div>
-
-                            <div style={{
-                                height: 3, borderRadius: 2, marginTop: "var(--space-3)",
-                                background: `${color}22`, overflow: "hidden",
-                            }}>
-                                <div style={{
-                                    height: "100%",
-                                    width: dias <= 0 ? "100%" : `${Math.max(5, 100 - (dias / 30) * 100)}%`,
-                                    background: color, borderRadius: 2,
-                                }} />
-                            </div>
-                        </div>
-                    );
-                })
+                        );
+                    });
+                })()
             )}
 
             {/* Detail Sheet */}

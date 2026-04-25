@@ -151,6 +151,7 @@ export default function AppHeader() {
     const PAGE_TITLES: Record<string, string> = {
         compromisos: "Mis Compromisos",
         historial: "Historial",
+        finanzas: "Mi Economía",
         ajustes: "Ajustes",
     };
 
