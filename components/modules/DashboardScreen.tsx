@@ -23,8 +23,6 @@ export default function DashboardScreen() {
         })
         .sort((a, b) => a.proximaFecha.localeCompare(b.proximaFecha));
 
-    const urgentes = activos.filter((c) => diasHastaNum(c.proximaFecha) <= 5);
-
     return (
         <div className="page fade-in" style={{ gap: "var(--space-5)" }}>
 
@@ -98,51 +96,6 @@ export default function DashboardScreen() {
                 </div>
             </div>
 
-            {/* Alerta urgentes */}
-            {urgentes.length > 0 && (
-                <div style={{
-                    background: "rgba(239,68,68,0.08)",
-                    border: "1px solid rgba(239,68,68,0.25)",
-                    borderRadius: "var(--radius-xl)",
-                    padding: "var(--space-4) var(--space-5)",
-                }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginBottom: "var(--space-3)" }}>
-                        <span style={{ fontSize: 18 }}>🚨</span>
-                        <p style={{ fontSize: "var(--text-sm)", fontWeight: 700, color: "#ef4444" }}>
-                            {urgentes.length} pago{urgentes.length > 1 ? "s" : ""} requiere{urgentes.length > 1 ? "n" : ""} atención
-                        </p>
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
-                        {urgentes.map((c) => {
-                            const dias = diasHastaNum(c.proximaFecha);
-                            const color = getUrgenciaColor(dias);
-                            return (
-                                <div key={c.id} style={{
-                                    display: "flex", justifyContent: "space-between", alignItems: "center",
-                                    background: "rgba(0,0,0,0.2)",
-                                    borderRadius: "var(--radius-md)",
-                                    padding: "var(--space-2) var(--space-3)",
-                                }}>
-                                    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-                                        <span style={{ fontSize: 16 }}>{c.icono ?? CATEGORIA_ICONO[c.categoria]}</span>
-                                        <div>
-                                            <p style={{ fontSize: "var(--text-sm)", fontWeight: 600, color: "var(--color-text)" }}>
-                                                {c.nombre}
-                                            </p>
-                                            <p style={{ fontSize: "var(--text-xs)", color }}>
-                                                {diasHasta(c.proximaFecha)}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <p style={{ fontFamily: "var(--font-display)", fontWeight: 700, color: "var(--color-text)", fontSize: "var(--text-sm)" }}>
-                                        {fmt(c.monto)}
-                                    </p>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            )}
 
             {/* Próximos pagos */}
             <div>

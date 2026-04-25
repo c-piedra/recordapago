@@ -14,7 +14,7 @@ export default function AppHeader() {
     const proximos = compromisos.filter((c) => {
         if (c.estado !== "activo") return false;
         const dias = diasHastaNum(c.proximaFecha);
-        return dias >= 0 && dias <= 3;
+        return dias >= 0 && dias <= (c.diasAntes ?? 3);
     }).length;
 
     const alertas = vencidos + proximos;
@@ -124,7 +124,7 @@ export default function AppHeader() {
                                                 💳 {proximos} pago{proximos > 1 ? "s" : ""} próximo{proximos > 1 ? "s" : ""}
                                             </p>
                                             <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)", marginTop: 4 }}>
-                                                Vencen en los próximos 3 días
+                                                Revisá tus compromisos próximos
                                             </p>
                                         </div>
                                     )}
