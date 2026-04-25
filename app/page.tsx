@@ -1,15 +1,16 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useStore } from "@/store";
 import { useAuth } from "@/hooks/useAuth";
 import AppHeader from "@/components/layout/AppHeader";
 import BottomNav from "@/components/layout/BottomNav";
-import LoginScreen from "@/components/modules/LoginScreen";
+import LandingScreen from "@/components/modules/LandingScreen";
 import DashboardScreen from "@/components/modules/DashboardScreen";
 import CompromisosScreen from "@/components/modules/CompromisosScreen";
 import HistorialScreen from "@/components/modules/HistorialScreen";
 import AjustesScreen from "@/components/modules/AjustesScreen";
 import FinanzasScreen from "@/components/modules/FinanzasScreen";
+import LoginScreen from "@/components/modules/LoginScreen";
 const SCREENS: Record<string, React.ComponentType> = {
   dashboard: DashboardScreen,
   compromisos: CompromisosScreen,
@@ -19,10 +20,11 @@ const SCREENS: Record<string, React.ComponentType> = {
 };
 export default function AppPage() {
   const { activeTab, setUserId, setUserName, loadSettings, initSpace, initSubscriptions } = useStore();
-  const { user, loading } = useAuth();
+  const { user, loading, loginWithGoogle } = useAuth();
   const Screen = SCREENS[activeTab] ?? DashboardScreen;
   const unsubRef = useRef<(() => void) | null>(null);
   const initializedRef = useRef(false);
+  const [showLogin, setShowLogin] = useState(false);
 
   useEffect(() => {
     if (!user || initializedRef.current) return;
@@ -83,8 +85,9 @@ export default function AppPage() {
     );
   }
 
-  if (!user) return <LoginScreen />;
-
+  if (!user) return showLogin
+    ? <LoginScreen />
+    : <LandingScreen onStart={() => setShowLogin(true)} onLogin={loginWithGoogle} />;
   return (
     <div className="app-shell" style={{ position: "relative" }}>
       <AppHeader />
