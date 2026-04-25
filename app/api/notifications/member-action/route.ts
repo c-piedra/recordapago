@@ -23,7 +23,11 @@ export async function POST(req: NextRequest) {
         const messages: Record<string, { title: string; body: string }> = {
             pago: {
                 title: "✅ Pago registrado",
-                body: `${fromName} marcó ${nombre} como pagado`,
+                body: `${fromName} marcó ${nombre} como pagado · ₡${Number(monto).toLocaleString("es-CR")}`,
+            },
+            comprobante: {
+                title: "📸 Comprobante subido",
+                body: `${fromName} subió el comprobante de ${nombre}`,
             },
             nuevo: {
                 title: "💳 Nuevo compromiso",

@@ -193,6 +193,7 @@ export const useStore = create<AppStore>()((set, get) => ({
         compromisosService.update(space.id, id, { proximaFecha: nuevaFecha }).catch(console.error);
 
         if (space.members.length > 1) {
+            // Notificar pago
             fetch("/api/notifications/member-action", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -204,6 +205,21 @@ export const useStore = create<AppStore>()((set, get) => ({
                     monto: compromiso.monto,
                 }),
             }).catch(console.error);
+
+            // Notificar comprobante si hay foto
+            if (comprobante) {
+                fetch("/api/notifications/member-action", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        spaceId: space.id,
+                        fromUserId: userId,
+                        action: "comprobante",
+                        nombre: compromiso.nombre,
+                        monto: compromiso.monto,
+                    }),
+                }).catch(console.error);
+            }
         }
     },
 

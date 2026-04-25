@@ -15,18 +15,14 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-        // Obtener todas las suscripciones
         const subsSnap = await adminDb.collection("pushSubscriptions").get();
-        if (subsSnap.empty) {
-            return NextResponse.json({ ok: true, message: "Sin suscriptores" });
-        }
+        if (subsSnap.empty) return NextResponse.json({ ok: true, message: "Sin suscriptores" });
 
         let sent = 0, failed = 0;
 
         for (const subDoc of subsSnap.docs) {
             const { subscription, userId } = subDoc.data();
 
-            // Obtener spaceId del usuario
             const settingsSnap = await adminDb
                 .collection("users").doc(userId)
                 .collection("settings").doc("main").get();
@@ -34,7 +30,6 @@ export async function POST(req: NextRequest) {
             const spaceId = settingsSnap.exists ? settingsSnap.data()?.spaceId : null;
             if (!spaceId) continue;
 
-            // Obtener compromisos del space
             const hoy = new Date();
             hoy.setHours(0, 0, 0, 0);
             const hoyStr = hoy.toISOString().split("T")[0];
@@ -45,30 +40,35 @@ export async function POST(req: NextRequest) {
                 .where("estado", "==", "activo")
                 .get();
 
-            const compromisos = compSnap.docs.map((d) => d.data());
-
-            const vencidos = compromisos.filter((c) => c.proximaFecha < hoyStr);
-            const proximos = compromisos.filter((c) => {
-                const fecha = new Date(c.proximaFecha + "T00:00:00");
-                const diff = Math.round((fecha.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
-                return diff >= 0 && diff <= (c.diasAntes ?? 3);
-            });
+            const compromisos = compSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as any[];
 
             const notifications: { title: string; body: string }[] = [];
 
-            if (vencidos.length > 0) {
-                notifications.push({
-                    title: "⚠️ Pagos vencidos",
-                    body: `Tenés ${vencidos.length} pago${vencidos.length > 1 ? "s" : ""} vencido${vencidos.length > 1 ? "s" : ""}. ¡Gollo ya está en camino! 😅`,
-                });
-            }
+            for (const c of compromisos) {
+                const fecha = new Date(c.proximaFecha + "T00:00:00");
+                const dias = Math.round((fecha.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
 
-            if (proximos.length > 0) {
-                const nombres = proximos.slice(0, 2).map((c) => c.nombre).join(", ");
-                notifications.push({
-                    title: "💳 Pagos próximos",
-                    body: `${nombres}${proximos.length > 2 ? ` y ${proximos.length - 2} más` : ""} vence${proximos.length > 1 ? "n" : ""} pronto`,
-                });
+                // Notificación el día exacto de pago
+                if (dias === 0) {
+                    notifications.push({
+                        title: "📅 Hoy vence un pago",
+                        body: `${c.nombre} vence hoy · ${c.monto ? `₡${Number(c.monto).toLocaleString("es-CR")}` : ""}`,
+                    });
+                }
+                // Notificación de recordatorio X días antes
+                else if (dias > 0 && c.diasAntes > 0 && dias <= c.diasAntes) {
+                    notifications.push({
+                        title: "💳 Pago próximo",
+                        body: `${c.nombre} vence en ${dias} día${dias > 1 ? "s" : ""} · ${c.monto ? `₡${Number(c.monto).toLocaleString("es-CR")}` : ""}`,
+                    });
+                }
+                // Vencido
+                else if (dias < 0) {
+                    notifications.push({
+                        title: "⚠️ Pago vencido",
+                        body: `${c.nombre} venció hace ${Math.abs(dias)} día${Math.abs(dias) > 1 ? "s" : ""}`,
+                    });
+                }
             }
 
             for (const notif of notifications) {
