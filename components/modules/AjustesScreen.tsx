@@ -119,23 +119,6 @@ export default function AjustesScreen() {
                 />
             </div>
 
-            {/* Días por defecto */}
-            <div className="input-group">
-                <label className="input-label">Días de anticipación por defecto</label>
-                <select
-                    className="input"
-                    value={settings.diasAntesPorDefecto}
-                    onChange={(e) => updateSettings({ diasAntesPorDefecto: parseInt(e.target.value) })}
-                    style={{ appearance: "none" }}
-                >
-                    {[1, 2, 3, 5, 7].map((d) => (
-                        <option key={d} value={d} style={{ background: "#1a2235" }}>
-                            {d} día{d !== 1 ? "s" : ""} antes
-                        </option>
-                    ))}
-                </select>
-            </div>
-
             {/* Espacio compartido */}
             <p className="section-title">Espacio compartido</p>
             <div className="card">

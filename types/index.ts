@@ -68,9 +68,9 @@ export interface Usuario {
 
 export interface AppSettings {
     notificacionesPush: boolean;
-    diasAntesPorDefecto: number;
     nombreUsuario: string;
     spaceId?: string;
+    perfil?: PerfilFinanciero;
 }
 export interface Compromiso {
     id: string;
@@ -84,13 +84,15 @@ export interface Compromiso {
     notas?: string;
     color?: string;
     icono?: string;
-    // ─── Tracker de deuda ─────────────────────────────────────
     esDeuda?: boolean;
     montoTotal?: number;
     cuotasTotales?: number;
     cuotasPagadas?: number;
     fechaFinEstimada?: string;
-    // ──────────────────────────────────────────────────────────
+    // Sharing selectivo
+    spaceOwner?: string;        // userId del dueño
+    compartidoCon?: string[];   // userIds con quienes está compartido
+    esCompartido?: boolean;     // true si es un compromiso compartido con este usuario
     creadoEn?: any;
     actualizadoEn?: any;
 }
@@ -110,4 +112,14 @@ export interface AppSettings {
     nombreUsuario: string;
     spaceId?: string;
     perfil?: PerfilFinanciero;
+}
+export interface InvitacionCompartir {
+    id: string;
+    compromisoId: string;
+    compromisoNombre: string;
+    fromUserId: string;
+    fromUserName: string;
+    toUserId: string;
+    estado: "pendiente" | "aceptada" | "rechazada";
+    creadoEn?: any;
 }

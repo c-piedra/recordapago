@@ -6,6 +6,8 @@ import { Badge, UrgenciaBadge, Sheet, Select, EmptyState, ConfirmDialog } from "
 import { Plus, Trash2, CheckCircle, Pause, Play } from "lucide-react";
 import type { Compromiso } from "@/types";
 import { uploadComprobante } from "@/lib/cloudinary";
+import { sharingService } from "@/lib/firestore";
+
 const CATEGORIA_OPTIONS = [
     { value: "suscripcion", label: "📺 Suscripción" },
     { value: "prestamo", label: "🏦 Préstamo" },
@@ -29,6 +31,7 @@ const FRECUENCIA_OPTIONS = [
 ];
 
 const DIAS_OPTIONS = [
+    { value: "", label: "Sin recordatorio" },
     { value: "1", label: "1 día antes" },
     { value: "2", label: "2 días antes" },
     { value: "3", label: "3 días antes" },
@@ -63,19 +66,16 @@ const SUGERENCIAS: { nombre: string; icono: string; categoria: string }[] = [
     { nombre: "Teléfono", icono: "📱", categoria: "servicio" },
     { nombre: "Alquiler", icono: "🏠", categoria: "alquiler" },
     { nombre: "Condominio", icono: "🏢", categoria: "alquiler" },
-    // Salud
     { nombre: "Medicamentos", icono: "💊", categoria: "salud" },
     { nombre: "Seguro médico", icono: "🏥", categoria: "salud" },
     { nombre: "Cita médica", icono: "👨‍⚕️", categoria: "salud" },
     { nombre: "Vitaminas", icono: "💊", categoria: "salud" },
     { nombre: "Farmacia", icono: "💊", categoria: "salud" },
-    // Mascotas
     { nombre: "Concentrado", icono: "🐾", categoria: "mascotas" },
     { nombre: "Veterinario", icono: "🐕", categoria: "mascotas" },
     { nombre: "Vacuna mascota", icono: "💉", categoria: "mascotas" },
     { nombre: "Guardería mascota", icono: "🏠", categoria: "mascotas" },
     { nombre: "Arena gato", icono: "🐱", categoria: "mascotas" },
-    // Educación
     { nombre: "Colegio", icono: "📚", categoria: "educacion" },
     { nombre: "Universidad", icono: "🎓", categoria: "educacion" },
     { nombre: "Curso online", icono: "💻", categoria: "educacion" },
@@ -84,43 +84,69 @@ const SUGERENCIAS: { nombre: string; icono: string; categoria: string }[] = [
     { nombre: "Seguro", icono: "🛡️", categoria: "otro" },
 ];
 
-
 export default function CompromisosScreen() {
-    const { compromisos, addCompromiso, updateCompromiso, deleteCompromiso, marcarPagado, settings, categoriaAbierta, setCategoriaAbierta } = useStore(); const [errors, setErrors] = useState<Record<string, boolean>>({});
+    const {
+        compromisos, addCompromiso, updateCompromiso, deleteCompromiso,
+        marcarPagado, settings, categoriaAbierta, setCategoriaAbierta,
+        space, userId, userName,
+    } = useStore();
+
+    const [errors, setErrors] = useState<Record<string, boolean>>({});
     const [sugerencias, setSugerencias] = useState<typeof SUGERENCIAS>([]);
     const [tab, setTab] = useState<"activos" | "pausados">("activos");
     const [showForm, setShowForm] = useState(false);
     const [selected, setSelected] = useState<Compromiso | null>(null);
     const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
     const [editando, setEditando] = useState<Compromiso | null>(null);
-    const [editForm, setEditForm] = useState({
-        nombre: "", categoria: "suscripcion", monto: "",
-        frecuencia: "mensual", proximaFecha: "",
-        diasAntes: "3", notas: "", icono: "",
-    });
     const [uploading, setUploading] = useState(false);
+    const [showPago, setShowPago] = useState<Compromiso | null>(null);
+    const [showCompartir, setShowCompartir] = useState<Compromiso | null>(null);
+    const [compartirCode, setCompartirCode] = useState("");
+    const [compartirLoading, setCompartirLoading] = useState(false);
+    const [compartirMsg, setCompartirMsg] = useState<{ ok: boolean; text: string } | null>(null);
+    const [categoriasColapsadas, setCategoriasColapsadas] = useState<Record<string, boolean>>({});
+
     const [form, setForm] = useState({
         nombre: "", categoria: "suscripcion", monto: "",
         frecuencia: "mensual", proximaFecha: "",
-        diasAntes: String(settings.diasAntesPorDefecto ?? 3),
-        notas: "", icono: "", categoriaPersonalizada: "",
+        diasAntes: "", notas: "", icono: "", categoriaPersonalizada: "",
     });
-    const [categoriasColapsadas, setCategoriasColapsadas] = useState<Record<string, boolean>>({});
+
+    const [editForm, setEditForm] = useState({
+        nombre: "", categoria: "suscripcion", monto: "",
+        frecuencia: "mensual", proximaFecha: "",
+        diasAntes: "", notas: "", icono: "",
+    });
+
+    const [pagoForm, setPagoForm] = useState({ notas: "", referencia: "", comprobante: "" });
 
     const activos = compromisos.filter((c) => c.estado === "activo");
     const pausados = compromisos.filter((c) => c.estado === "pausado");
     const shown = tab === "activos" ? activos : pausados;
-    const [showPago, setShowPago] = useState<Compromiso | null>(null);
-    const [pagoForm, setPagoForm] = useState({ notas: "", referencia: "", comprobante: "" });
+
     const resetForm = () => {
         setErrors({});
         setForm({
             nombre: "", categoria: "suscripcion", monto: "",
             frecuencia: "mensual", proximaFecha: "",
-            diasAntes: String(settings.diasAntesPorDefecto ?? 3),
-            notas: "", icono: "", categoriaPersonalizada: "",
+            diasAntes: "", notas: "", icono: "", categoriaPersonalizada: "",
         });
     };
+
+    useEffect(() => {
+        if (categoriaAbierta) {
+            setCategoriasColapsadas((prev) => ({ ...prev, [categoriaAbierta]: false }));
+            setCategoriaAbierta(null);
+        }
+    }, [categoriaAbierta]);
+
+    const toggleCategoria = (cat: string) => {
+        setCategoriasColapsadas((prev) => ({
+            ...prev,
+            [cat]: prev[cat] === undefined ? false : !prev[cat],
+        }));
+    };
+
     const handleSubmit = () => {
         const newErrors: Record<string, boolean> = {};
         if (!form.nombre) newErrors.nombre = true;
@@ -135,7 +161,7 @@ export default function CompromisosScreen() {
             monto: parseFloat(form.monto),
             frecuencia: form.frecuencia as any,
             proximaFecha: form.proximaFecha,
-            diasAntes: parseInt(form.diasAntes),
+            diasAntes: form.diasAntes ? parseInt(form.diasAntes) : 0,
             estado: "activo",
             notas: form.categoriaPersonalizada || form.notas || undefined,
             icono: form.icono || undefined,
@@ -143,6 +169,7 @@ export default function CompromisosScreen() {
         resetForm();
         setShowForm(false);
     };
+
     const handleEditar = (c: Compromiso) => {
         setEditando(c);
         setEditForm({
@@ -166,12 +193,13 @@ export default function CompromisosScreen() {
             monto: parseFloat(editForm.monto),
             frecuencia: editForm.frecuencia as any,
             proximaFecha: editForm.proximaFecha,
-            diasAntes: parseInt(editForm.diasAntes),
+            diasAntes: editForm.diasAntes ? parseInt(editForm.diasAntes) : 0,
             notas: editForm.notas || undefined,
             icono: editForm.icono || undefined,
         });
         setEditando(null);
     };
+
     const handleConfirmarPago = () => {
         if (!showPago) return;
         marcarPagado(
@@ -184,19 +212,6 @@ export default function CompromisosScreen() {
         setShowPago(null);
     };
 
-
-    const toggleCategoria = (cat: string) => {
-        setCategoriasColapsadas((prev) => ({
-            ...prev,
-            [cat]: prev[cat] === undefined ? false : !prev[cat]
-        }));
-    };
-    useEffect(() => {
-        if (categoriaAbierta) {
-            setCategoriasColapsadas((prev) => ({ ...prev, [categoriaAbierta]: false }));
-            setCategoriaAbierta(null);
-        }
-    }, [categoriaAbierta]);
     return (
         <div className="page fade-in">
 
@@ -210,12 +225,11 @@ export default function CompromisosScreen() {
                 </button>
             </div>
 
-            {/* Botón agregar */}
             <button className="btn btn-primary" style={{ width: "100%" }} onClick={() => setShowForm(true)}>
                 <Plus size={16} /> Nuevo compromiso
             </button>
 
-            {/* Lista */}
+            {/* Lista agrupada por categoría */}
             {shown.length === 0 ? (
                 <EmptyState
                     icon={tab === "activos" ? "💳" : "⏸️"}
@@ -247,7 +261,6 @@ export default function CompromisosScreen() {
                                         padding: "var(--space-3) var(--space-4)",
                                         cursor: "pointer",
                                         transition: "border-radius 0.2s",
-                                        marginBottom: 0,
                                     }}
                                 >
                                     <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
@@ -270,11 +283,8 @@ export default function CompromisosScreen() {
                                         <span style={{
                                             fontSize: 12, color: "var(--color-text-3)",
                                             transform: colapsado ? "rotate(0deg)" : "rotate(180deg)",
-                                            transition: "transform 0.2s",
-                                            display: "inline-block",
-                                        }}>
-                                            ▼
-                                        </span>
+                                            transition: "transform 0.2s", display: "inline-block",
+                                        }}>▼</span>
                                     </div>
                                 </button>
 
@@ -316,9 +326,29 @@ export default function CompromisosScreen() {
                                                                 <p style={{ fontWeight: 700, fontSize: "var(--text-sm)", color: "var(--color-text)" }}>
                                                                     {c.nombre}
                                                                 </p>
-                                                                <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)", marginTop: 2 }}>
-                                                                    {FRECUENCIA_LABEL[c.frecuencia]}
-                                                                </p>
+                                                                <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginTop: 2 }}>
+                                                                    <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)" }}>
+                                                                        {FRECUENCIA_LABEL[c.frecuencia]}
+                                                                    </p>
+                                                                    {c.esCompartido && (
+                                                                        <span style={{
+                                                                            fontSize: "var(--text-xs)",
+                                                                            background: "rgba(99,102,241,0.15)",
+                                                                            color: "var(--color-primary)",
+                                                                            padding: "1px 6px",
+                                                                            borderRadius: 99,
+                                                                        }}>🤝 Compartido</span>
+                                                                    )}
+                                                                    {c.compartidoCon && c.compartidoCon.length > 0 && !c.esCompartido && (
+                                                                        <span style={{
+                                                                            fontSize: "var(--text-xs)",
+                                                                            background: "rgba(34,197,94,0.15)",
+                                                                            color: "var(--color-success)",
+                                                                            padding: "1px 6px",
+                                                                            borderRadius: 99,
+                                                                        }}>👥 {c.compartidoCon.length}</span>
+                                                                    )}
+                                                                </div>
                                                             </div>
                                                         </div>
                                                         <div style={{ textAlign: "right" }}>
@@ -378,7 +408,7 @@ export default function CompromisosScreen() {
                         ["Frecuencia", FRECUENCIA_LABEL[selected.frecuencia]],
                         ["Próximo pago", fmtDate(selected.proximaFecha)],
                         ["Vence", diasHasta(selected.proximaFecha)],
-                        ["Recordatorio", `${selected.diasAntes} día${selected.diasAntes !== 1 ? "s" : ""} antes`],
+                        ["Recordatorio", selected.diasAntes ? `${selected.diasAntes} día${selected.diasAntes !== 1 ? "s" : ""} antes` : "Sin recordatorio"],
                         ["Notas", selected.notas ?? "-"],
                     ].map(([l, v]) => (
                         <div key={l as string} style={{
@@ -417,6 +447,15 @@ export default function CompromisosScreen() {
                         >
                             ✏️ Editar
                         </button>
+                        {selected.estado === "activo" && !selected.esCompartido && (
+                            <button
+                                className="btn btn-secondary"
+                                style={{ width: "100%" }}
+                                onClick={() => { setShowCompartir(selected); setSelected(null); }}
+                            >
+                                🤝 Compartir con alguien
+                            </button>
+                        )}
                         <button
                             className="btn btn-ghost"
                             style={{ width: "100%", color: "var(--color-danger)" }}
@@ -431,8 +470,6 @@ export default function CompromisosScreen() {
             {/* Form Sheet */}
             {showForm && (
                 <Sheet title="Nuevo Compromiso" onClose={() => { setShowForm(false); resetForm(); }}>
-
-                    {/* Nombre con autocompletado */}
                     <div className="input-group">
                         <label className="input-label" style={{ color: errors.nombre ? "var(--color-danger)" : "var(--color-primary)" }}>
                             Nombre {errors.nombre && "— requerido"} *
@@ -463,35 +500,25 @@ export default function CompromisosScreen() {
                                     background: "var(--color-bg-elevated)",
                                     border: "1px solid var(--color-border-2)",
                                     borderRadius: "var(--radius-md)",
-                                    zIndex: 100,
-                                    maxHeight: 280,
-                                    overflowY: "auto",
+                                    zIndex: 100, maxHeight: 280, overflowY: "auto",
                                 }}>
-                                    {/* Categorías agrupadas */}
                                     {["suscripcion", "prestamo", "tarjeta", "servicio", "alquiler", "salud", "mascotas", "educacion", "otro"].map((cat) => {
                                         const items = sugerencias.filter((s) => s.categoria === cat);
                                         if (items.length === 0) return null;
                                         const catLabels: Record<string, string> = {
-                                            suscripcion: "📺 Suscripciones",
-                                            prestamo: "🏦 Préstamos",
-                                            tarjeta: "💳 Tarjetas",
-                                            servicio: "⚡ Servicios",
-                                            alquiler: "🏠 Alquiler",
-                                            salud: "🏥 Salud",
-                                            mascotas: "🐾 Mascotas",
-                                            educacion: "📚 Educación",
+                                            suscripcion: "📺 Suscripciones", prestamo: "🏦 Préstamos",
+                                            tarjeta: "💳 Tarjetas", servicio: "⚡ Servicios",
+                                            alquiler: "🏠 Alquiler", salud: "🏥 Salud",
+                                            mascotas: "🐾 Mascotas", educacion: "📚 Educación",
                                             otro: "📋 Otro",
                                         };
                                         return (
                                             <div key={cat}>
                                                 <p style={{
                                                     padding: "6px var(--space-4) 2px",
-                                                    fontSize: "var(--text-xs)",
-                                                    color: "var(--color-primary)",
-                                                    fontWeight: 700,
-                                                    letterSpacing: "0.08em",
-                                                    textTransform: "uppercase",
-                                                    background: "var(--color-bg-card)",
+                                                    fontSize: "var(--text-xs)", color: "var(--color-primary)",
+                                                    fontWeight: 700, letterSpacing: "0.08em",
+                                                    textTransform: "uppercase", background: "var(--color-bg-card)",
                                                 }}>
                                                     {catLabels[cat]}
                                                 </p>
@@ -524,89 +551,50 @@ export default function CompromisosScreen() {
                         </div>
                     </div>
 
-                    <Select
-                        label="Categoría" value={form.categoria}
-                        onChange={(v) => setForm({ ...form, categoria: v })}
-                        options={CATEGORIA_OPTIONS} required
-                    />
+                    <Select label="Categoría" value={form.categoria} onChange={(v) => setForm({ ...form, categoria: v })} options={CATEGORIA_OPTIONS} required />
+
                     {form.categoria === "otro" && (
                         <div className="input-group">
                             <label className="input-label">¿Qué tipo de gasto es?</label>
-                            <input
-                                className="input"
-                                value={form.categoriaPersonalizada}
+                            <input className="input" value={form.categoriaPersonalizada}
                                 onChange={(e) => setForm({ ...form, categoriaPersonalizada: e.target.value })}
-                                placeholder="Ej: Hobby, Deporte, Religión..."
-                            />
+                                placeholder="Ej: Hobby, Deporte, Religión..." />
                         </div>
                     )}
+
                     <div className="input-group">
                         <label className="input-label" style={{ color: errors.monto ? "var(--color-danger)" : "var(--color-primary)" }}>
                             Monto (₡) {errors.monto && "— requerido"} *
                         </label>
-                        <input
-                            className="input" type="number"
-                            value={form.monto}
-                            placeholder="0"
+                        <input className="input" type="number" value={form.monto} placeholder="0"
                             style={{ borderColor: errors.monto ? "var(--color-danger)" : undefined }}
-                            onChange={(e) => {
-                                setForm({ ...form, monto: e.target.value });
-                                if (errors.monto) setErrors({ ...errors, monto: false });
-                            }}
-                        />
+                            onChange={(e) => { setForm({ ...form, monto: e.target.value }); if (errors.monto) setErrors({ ...errors, monto: false }); }} />
                     </div>
 
-                    <Select
-                        label="Frecuencia" value={form.frecuencia}
-                        onChange={(v) => setForm({ ...form, frecuencia: v })}
-                        options={FRECUENCIA_OPTIONS} required
-                    />
+                    <Select label="Frecuencia" value={form.frecuencia} onChange={(v) => setForm({ ...form, frecuencia: v })} options={FRECUENCIA_OPTIONS} required />
+
                     <div className="input-group">
                         <label className="input-label" style={{ color: errors.proximaFecha ? "var(--color-danger)" : "var(--color-primary)" }}>
                             Próxima fecha de pago {errors.proximaFecha && "— requerida"} *
                         </label>
-                        <input
-                            className="input" type="date"
-                            value={form.proximaFecha}
+                        <input className="input" type="date" value={form.proximaFecha}
                             style={{ borderColor: errors.proximaFecha ? "var(--color-danger)" : undefined }}
-                            onChange={(e) => {
-                                setForm({ ...form, proximaFecha: e.target.value });
-                                if (errors.proximaFecha) setErrors({ ...errors, proximaFecha: false });
-                            }}
-                        />
+                            onChange={(e) => { setForm({ ...form, proximaFecha: e.target.value }); if (errors.proximaFecha) setErrors({ ...errors, proximaFecha: false }); }} />
                     </div>
 
-                    <Select
-                        label="Recordarme" value={form.diasAntes}
-                        onChange={(v) => setForm({ ...form, diasAntes: v })}
-                        options={DIAS_OPTIONS}
-                    />
+                    <Select label="Recordarme" value={form.diasAntes} onChange={(v) => setForm({ ...form, diasAntes: v })} options={DIAS_OPTIONS} />
 
                     <div className="input-group">
                         <label className="input-label">Emoji personalizado (opcional)</label>
-                        <input
-                            className="input"
-                            value={form.icono}
-                            onChange={(e) => setForm({ ...form, icono: e.target.value })}
-                            placeholder="Ej: 🎵 💡 🏠"
-                        />
+                        <input className="input" value={form.icono} onChange={(e) => setForm({ ...form, icono: e.target.value })} placeholder="Ej: 🎵 💡 🏠" />
                     </div>
 
                     <div className="input-group">
                         <label className="input-label">Notas (opcional)</label>
-                        <input
-                            className="input"
-                            value={form.notas}
-                            onChange={(e) => setForm({ ...form, notas: e.target.value })}
-                            placeholder="Observaciones..."
-                        />
+                        <input className="input" value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} placeholder="Observaciones..." />
                     </div>
 
-                    <button
-                        className="btn btn-primary"
-                        style={{ width: "100%" }}
-                        onClick={handleSubmit}
-                    >
+                    <button className="btn btn-primary" style={{ width: "100%" }} onClick={handleSubmit}>
                         Guardar compromiso
                     </button>
                 </Sheet>
@@ -620,88 +608,50 @@ export default function CompromisosScreen() {
                     onCancel={() => setConfirmDelete(null)}
                 />
             )}
+
+            {/* Edit Sheet */}
             {editando && (
                 <Sheet title="Editar Compromiso" onClose={() => setEditando(null)}>
                     <div className="input-group">
                         <label className="input-label">Nombre *</label>
-                        <input
-                            className="input"
-                            value={editForm.nombre}
-                            onChange={(e) => setEditForm({ ...editForm, nombre: e.target.value })}
-                        />
+                        <input className="input" value={editForm.nombre} onChange={(e) => setEditForm({ ...editForm, nombre: e.target.value })} />
                     </div>
-                    <Select
-                        label="Categoría" value={editForm.categoria}
-                        onChange={(v) => setEditForm({ ...editForm, categoria: v })}
-                        options={CATEGORIA_OPTIONS}
-                    />
+                    <Select label="Categoría" value={editForm.categoria} onChange={(v) => setEditForm({ ...editForm, categoria: v })} options={CATEGORIA_OPTIONS} />
                     <div className="input-group">
                         <label className="input-label">Monto (₡) *</label>
-                        <input
-                            className="input" type="number"
-                            value={editForm.monto}
-                            onChange={(e) => setEditForm({ ...editForm, monto: e.target.value })}
-                        />
+                        <input className="input" type="number" value={editForm.monto} onChange={(e) => setEditForm({ ...editForm, monto: e.target.value })} />
                     </div>
-                    <Select
-                        label="Frecuencia" value={editForm.frecuencia}
-                        onChange={(v) => setEditForm({ ...editForm, frecuencia: v })}
-                        options={FRECUENCIA_OPTIONS}
-                    />
+                    <Select label="Frecuencia" value={editForm.frecuencia} onChange={(v) => setEditForm({ ...editForm, frecuencia: v })} options={FRECUENCIA_OPTIONS} />
                     <div className="input-group">
                         <label className="input-label">Próxima fecha de pago *</label>
-                        <input
-                            className="input" type="date"
-                            value={editForm.proximaFecha}
-                            onChange={(e) => setEditForm({ ...editForm, proximaFecha: e.target.value })}
-                        />
+                        <input className="input" type="date" value={editForm.proximaFecha} onChange={(e) => setEditForm({ ...editForm, proximaFecha: e.target.value })} />
                     </div>
-                    <Select
-                        label="Recordarme" value={editForm.diasAntes}
-                        onChange={(v) => setEditForm({ ...editForm, diasAntes: v })}
-                        options={DIAS_OPTIONS}
-                    />
+                    <Select label="Recordarme" value={editForm.diasAntes} onChange={(v) => setEditForm({ ...editForm, diasAntes: v })} options={DIAS_OPTIONS} />
                     <div className="input-group">
                         <label className="input-label">Emoji personalizado</label>
-                        <input
-                            className="input"
-                            value={editForm.icono}
-                            onChange={(e) => setEditForm({ ...editForm, icono: e.target.value })}
-                            placeholder="Ej: 🎵 💡 🏠"
-                        />
+                        <input className="input" value={editForm.icono} onChange={(e) => setEditForm({ ...editForm, icono: e.target.value })} placeholder="Ej: 🎵 💡 🏠" />
                     </div>
                     <div className="input-group">
                         <label className="input-label">Notas</label>
-                        <input
-                            className="input"
-                            value={editForm.notas}
-                            onChange={(e) => setEditForm({ ...editForm, notas: e.target.value })}
-                            placeholder="Observaciones..."
-                        />
+                        <input className="input" value={editForm.notas} onChange={(e) => setEditForm({ ...editForm, notas: e.target.value })} placeholder="Observaciones..." />
                     </div>
-                    <button
-                        className="btn btn-primary"
-                        style={{ width: "100%" }}
-                        onClick={handleGuardarEdicion}
-                    >
+                    <button className="btn btn-primary" style={{ width: "100%" }} onClick={handleGuardarEdicion}>
                         Guardar cambios
                     </button>
                 </Sheet>
             )}
+
+            {/* Pago Sheet */}
             {showPago && (
                 <Sheet title="Registrar pago" onClose={() => setShowPago(null)}>
                     <div style={{
-                        background: "var(--color-bg-elevated)",
-                        borderRadius: "var(--radius-md)",
-                        padding: "var(--space-4)", textAlign: "center",
-                        marginBottom: "var(--space-2)",
+                        background: "var(--color-bg-elevated)", borderRadius: "var(--radius-md)",
+                        padding: "var(--space-4)", textAlign: "center", marginBottom: "var(--space-2)",
                     }}>
                         <p style={{ fontSize: 32, marginBottom: "var(--space-2)" }}>
                             {showPago.icono ?? CATEGORIA_ICONO[showPago.categoria]}
                         </p>
-                        <p style={{ fontFamily: "var(--font-display)", fontWeight: 700, color: "var(--color-text)" }}>
-                            {showPago.nombre}
-                        </p>
+                        <p style={{ fontFamily: "var(--font-display)", fontWeight: 700, color: "var(--color-text)" }}>{showPago.nombre}</p>
                         <p style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "var(--text-2xl)", color: "var(--color-primary)", marginTop: 4 }}>
                             {fmt(showPago.monto)}
                         </p>
@@ -709,72 +659,44 @@ export default function CompromisosScreen() {
 
                     <div className="input-group">
                         <label className="input-label">Referencia / comprobante (opcional)</label>
-                        <input
-                            className="input"
-                            value={pagoForm.referencia}
+                        <input className="input" value={pagoForm.referencia}
                             onChange={(e) => setPagoForm({ ...pagoForm, referencia: e.target.value })}
-                            placeholder="Ej: #123456, transferencia SINPE..."
-                        />
+                            placeholder="Ej: #123456, transferencia SINPE..." />
                     </div>
 
                     <div className="input-group">
                         <label className="input-label">Notas (opcional)</label>
-                        <input
-                            className="input"
-                            value={pagoForm.notas}
+                        <input className="input" value={pagoForm.notas}
                             onChange={(e) => setPagoForm({ ...pagoForm, notas: e.target.value })}
-                            placeholder="Observaciones del pago..."
-                        />
+                            placeholder="Observaciones del pago..." />
                     </div>
 
-                    {/* Upload comprobante */}
                     <div className="input-group">
                         <label className="input-label">Foto del comprobante (opcional)</label>
                         {pagoForm.comprobante ? (
                             <div style={{ position: "relative" }}>
-                                <img
-                                    src={pagoForm.comprobante}
-                                    alt="Comprobante"
-                                    style={{
-                                        width: "100%", borderRadius: "var(--radius-md)",
-                                        border: "1px solid var(--color-border)",
-                                        maxHeight: 200, objectFit: "cover",
-                                    }}
-                                />
-                                <button
-                                    className="btn btn-ghost"
-                                    style={{
-                                        position: "absolute", top: 8, right: 8,
-                                        padding: "4px 8px", minHeight: 0,
-                                        background: "rgba(0,0,0,0.6)",
-                                        color: "var(--color-danger)",
-                                    }}
-                                    onClick={() => setPagoForm({ ...pagoForm, comprobante: "" })}
-                                >
-                                    ✕
-                                </button>
+                                <img src={pagoForm.comprobante} alt="Comprobante" style={{
+                                    width: "100%", borderRadius: "var(--radius-md)",
+                                    border: "1px solid var(--color-border)", maxHeight: 200, objectFit: "cover",
+                                }} />
+                                <button className="btn btn-ghost" style={{
+                                    position: "absolute", top: 8, right: 8, padding: "4px 8px",
+                                    minHeight: 0, background: "rgba(0,0,0,0.6)", color: "var(--color-danger)",
+                                }} onClick={() => setPagoForm({ ...pagoForm, comprobante: "" })}>✕</button>
                             </div>
                         ) : (
                             <label style={{
-                                display: "flex", flexDirection: "column",
-                                alignItems: "center", justifyContent: "center",
-                                gap: "var(--space-2)",
-                                border: "2px dashed var(--color-border-2)",
-                                borderRadius: "var(--radius-md)",
-                                padding: "var(--space-6)",
-                                cursor: uploading ? "not-allowed" : "pointer",
+                                display: "flex", flexDirection: "column", alignItems: "center",
+                                justifyContent: "center", gap: "var(--space-2)",
+                                border: "2px dashed var(--color-border-2)", borderRadius: "var(--radius-md)",
+                                padding: "var(--space-6)", cursor: uploading ? "not-allowed" : "pointer",
                                 opacity: uploading ? 0.6 : 1,
-                                transition: "border-color 0.2s",
                             }}>
                                 <span style={{ fontSize: 32 }}>{uploading ? "⏳" : "📷"}</span>
                                 <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-3)" }}>
                                     {uploading ? "Subiendo..." : "Tocá para subir foto"}
                                 </p>
-                                <input
-                                    type="file"
-                                    accept="image/*"
-                                    style={{ display: "none" }}
-                                    disabled={uploading}
+                                <input type="file" accept="image/*" style={{ display: "none" }} disabled={uploading}
                                     onChange={async (e) => {
                                         const file = e.target.files?.[0];
                                         if (!file) return;
@@ -782,35 +704,93 @@ export default function CompromisosScreen() {
                                         try {
                                             const url = await uploadComprobante(file);
                                             setPagoForm({ ...pagoForm, comprobante: url });
-                                        } catch {
-                                            console.error("Error subiendo imagen");
-                                        } finally {
-                                            setUploading(false);
-                                        }
-                                    }}
-                                />
+                                        } catch { console.error("Error subiendo imagen"); }
+                                        finally { setUploading(false); }
+                                    }} />
                             </label>
                         )}
                     </div>
 
-                    <button
-                        className="btn btn-primary"
-                        style={{ width: "100%" }}
-                        disabled={uploading}
-                        onClick={handleConfirmarPago}
-                    >
+                    <button className="btn btn-primary" style={{ width: "100%" }} disabled={uploading} onClick={handleConfirmarPago}>
                         ✅ Confirmar pago
                     </button>
-                    <button
-                        className="btn btn-ghost"
-                        style={{ width: "100%" }}
-                        onClick={() => { marcarPagado(showPago.id); setShowPago(null); }}
-                    >
+                    <button className="btn btn-ghost" style={{ width: "100%" }}
+                        onClick={() => { marcarPagado(showPago.id); setShowPago(null); }}>
                         Marcar pagado sin notas
                     </button>
                 </Sheet>
             )}
-        </div>
 
+            {/* Compartir Sheet */}
+            {showCompartir && (
+                <Sheet title="Compartir compromiso" onClose={() => { setShowCompartir(null); setCompartirCode(""); setCompartirMsg(null); }}>
+                    <div style={{
+                        background: "var(--color-bg-elevated)", borderRadius: "var(--radius-md)",
+                        padding: "var(--space-4)", textAlign: "center", marginBottom: "var(--space-4)",
+                    }}>
+                        <p style={{ fontSize: 32, marginBottom: "var(--space-2)" }}>
+                            {showCompartir.icono ?? CATEGORIA_ICONO[showCompartir.categoria]}
+                        </p>
+                        <p style={{ fontFamily: "var(--font-display)", fontWeight: 700, color: "var(--color-text)" }}>
+                            {showCompartir.nombre}
+                        </p>
+                        <p style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "var(--text-2xl)", color: "var(--color-primary)", marginTop: 4 }}>
+                            {fmt(showCompartir.monto)}
+                        </p>
+                    </div>
+
+                    <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-2)", marginBottom: "var(--space-4)", lineHeight: 1.6 }}>
+                        Ingresá el código de invitación de la persona con quien querés compartir este compromiso. Ambos recibirán recordatorios.
+                    </p>
+
+                    <div className="input-group">
+                        <label className="input-label">Código de la otra persona</label>
+                        <input
+                            className="input"
+                            value={compartirCode}
+                            onChange={(e) => { setCompartirCode(e.target.value.toUpperCase()); setCompartirMsg(null); }}
+                            placeholder="Ej: ABC123"
+                            maxLength={6}
+                            style={{ letterSpacing: "0.15em", fontWeight: 700, textTransform: "uppercase" }}
+                        />
+                    </div>
+
+                    {compartirMsg && (
+                        <p style={{
+                            fontSize: "var(--text-sm)",
+                            color: compartirMsg.ok ? "var(--color-success)" : "var(--color-danger)",
+                            marginBottom: "var(--space-2)",
+                        }}>
+                            {compartirMsg.ok ? "✅" : "❌"} {compartirMsg.text}
+                        </p>
+                    )}
+
+                    <button
+                        className="btn btn-primary"
+                        style={{ width: "100%" }}
+                        disabled={compartirLoading || compartirCode.length < 6}
+                        onClick={async () => {
+                            if (!showCompartir || !space) return;
+                            setCompartirLoading(true);
+                            const result = await sharingService.compartirCompromiso(
+                                space.id,
+                                showCompartir.id,
+                                userId!,
+                                userName!,
+                                compartirCode,
+                            );
+                            setCompartirMsg({ ok: result.ok, text: result.error ?? "¡Compartido exitosamente!" });
+                            setCompartirLoading(false);
+                            if (result.ok) {
+                                setCompartirCode("");
+                                setTimeout(() => { setShowCompartir(null); setCompartirMsg(null); }, 2000);
+                            }
+                        }}
+                    >
+                        {compartirLoading ? "Compartiendo..." : "Compartir"}
+                    </button>
+                </Sheet>
+            )}
+        </div>
     );
 }

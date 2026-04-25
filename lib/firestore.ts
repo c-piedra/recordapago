@@ -157,4 +157,72 @@ export const pushService = {
         );
         return results.filter(Boolean) as { userId: string; subscription: any }[];
     },
+
+};
+// ─── Sharing selectivo ────────────────────────────────────────────────────────
+export const sharingService = {
+    // Compartir un compromiso con otro usuario por código
+    async compartirCompromiso(
+        spaceId: string,
+        compromisoId: string,
+        fromUserId: string,
+        fromUserName: string,
+        toCode: string,
+    ): Promise<{ ok: boolean; error?: string }> {
+        try {
+            // Buscar el space del destinatario por código
+            const snap = await getDocs(
+                query(collection(db, "spaces"), where("inviteCode", "==", toCode.toUpperCase()))
+            );
+            if (snap.empty) return { ok: false, error: "Código inválido" };
+
+            const toSpace = snap.docs[0].data();
+            const toMembers = toSpace.members as string[];
+            if (toMembers.length === 0) return { ok: false, error: "No se encontró el usuario" };
+
+            const toUserId = toMembers[0];
+            if (toUserId === fromUserId) return { ok: false, error: "No podés compartir contigo mismo" };
+
+            // Agregar fromUserId al compartidoCon del compromiso
+            const compRef = spaceDoc(spaceId, "compromisos", compromisoId);
+            const compSnap = await getDoc(compRef);
+            if (!compSnap.exists()) return { ok: false, error: "Compromiso no encontrado" };
+
+            const current = compSnap.data();
+            const compartidoCon: string[] = current.compartidoCon ?? [];
+            if (compartidoCon.includes(toUserId)) return { ok: false, error: "Ya está compartido con ese usuario" };
+
+            await updateDoc(compRef, {
+                compartidoCon: [...compartidoCon, toUserId],
+                spaceOwner: fromUserId,
+            });
+
+            // Copiar el compromiso al space del destinatario como referencia
+            const compData = compSnap.data();
+            await addDoc(spaceCol(snap.docs[0].id, "compromisos"), cleanData({
+                ...compData,
+                esCompartido: true,
+                spaceOwner: fromUserId,
+                spaceOwnerId: spaceId,
+                compromisoOriginalId: compromisoId,
+                compartidoCon: [toUserId],
+                creadoEn: serverTimestamp(),
+            }));
+
+            return { ok: true };
+        } catch (err) {
+            console.error(err);
+            return { ok: false, error: "Error al compartir" };
+        }
+    },
+
+    // Dejar de compartir
+    async dejarCompartir(spaceId: string, compromisoId: string, toUserId: string): Promise<void> {
+        const compRef = spaceDoc(spaceId, "compromisos", compromisoId);
+        const compSnap = await getDoc(compRef);
+        if (!compSnap.exists()) return;
+        const current = compSnap.data();
+        const compartidoCon = (current.compartidoCon ?? []).filter((id: string) => id !== toUserId);
+        await updateDoc(compRef, { compartidoCon });
+    },
 };
