@@ -1,5 +1,7 @@
 "use client";
 import { useAuth } from "@/hooks/useAuth";
+import LoginHero from "./login/LoginHero";
+import LoginFeatures from "./login/LoginFeatures";
 
 export default function LoginScreen() {
     const { loginWithGoogle, loading } = useAuth();
@@ -15,7 +17,6 @@ export default function LoginScreen() {
             padding: "var(--space-6)",
             gap: "var(--space-6)",
         }}>
-            {/* Glow */}
             <div style={{
                 position: "absolute",
                 top: "20%",
@@ -27,68 +28,9 @@ export default function LoginScreen() {
                 pointerEvents: "none",
             }} />
 
-            {/* Icon */}
-            <div style={{
-                width: 80, height: 80,
-                borderRadius: "var(--radius-xl)",
-                background: "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)",
-                display: "grid", placeItems: "center",
-                fontSize: 40,
-                boxShadow: "0 0 40px rgba(99,102,241,0.3)",
-            }}>
-                💳
-            </div>
+            <LoginHero />
+            <LoginFeatures />
 
-            {/* Title */}
-            <div style={{ textAlign: "center" }}>
-                <h1 style={{
-                    fontFamily: "var(--font-display)",
-                    fontSize: "var(--text-3xl)",
-                    fontWeight: 800,
-                    color: "var(--color-text)",
-                    marginBottom: "var(--space-2)",
-                }}>
-                    Recorda<span style={{ color: "var(--color-primary)" }}>Pago</span>
-                </h1>
-                <p style={{
-                    fontSize: "var(--text-base)",
-                    color: "var(--color-text-3)",
-                    maxWidth: 280,
-                    lineHeight: 1.6,
-                }}>
-                    No te quedés sin luz, sin agua,<br />ni con Gollo en la puerta 😅
-                </p>
-            </div>
-
-            {/* Features */}
-            <div style={{
-                width: "100%",
-                maxWidth: 320,
-                display: "flex",
-                flexDirection: "column",
-                gap: "var(--space-3)",
-            }}>
-                {[
-                    { icon: "🔔", text: "Recordatorios automáticos antes de vencer" },
-                    { icon: "💳", text: "Suscripciones, préstamos, tarjetas y más" },
-                    { icon: "📊", text: "Control total de tus gastos recurrentes" },
-                ].map(({ icon, text }) => (
-                    <div key={text} style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "var(--space-3)",
-                        background: "var(--color-bg-card)",
-                        border: "1px solid var(--color-border)",
-                        borderRadius: "var(--radius-md)",
-                        padding: "var(--space-3) var(--space-4)",
-                    }}>
-                        <span style={{ fontSize: 20 }}>{icon}</span>
-                        <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-2)" }}>{text}</p>
-                    </div>
-                ))}
-            </div>
-
-            {/* Login button */}
             <button
                 className="btn btn-primary"
                 style={{ width: "100%", maxWidth: 320, gap: "var(--space-3)" }}

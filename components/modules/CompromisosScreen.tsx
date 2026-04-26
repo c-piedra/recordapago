@@ -1,137 +1,51 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useStore } from "@/store";
-import { fmt, fmtDate, diasHasta, diasHastaNum, getUrgenciaColor, CATEGORIA_LABEL, CATEGORIA_ICONO, FRECUENCIA_LABEL } from "@/lib/utils";
-import { Badge, UrgenciaBadge, Sheet, Select, EmptyState, ConfirmDialog } from "@/components/ui";
-import { Plus, Trash2, CheckCircle, Pause, Play } from "lucide-react";
+import { EmptyState, ConfirmDialog } from "@/components/ui";
+import { Plus } from "lucide-react";
 import type { Compromiso } from "@/types";
-import { uploadComprobante } from "@/lib/cloudinary";
-import { sharingService } from "@/lib/firestore";
+import CategoriaGroup from "./compromisos/CategoriaGroup";
+import CompromisoDetailSheet from "./compromisos/CompromisoDetailSheet";
+import CompromisoFormSheet, { type FormData } from "./compromisos/CompromisoFormSheet";
+import CompromisoEditSheet, { type EditFormData } from "./compromisos/CompromisoEditSheet";
+import PagoSheet, { type PagoFormData } from "./compromisos/PagoSheet";
+import CompartirSheet from "./compromisos/CompartirSheet";
 
-const CATEGORIA_OPTIONS = [
-    { value: "suscripcion", label: "📺 Suscripción" },
-    { value: "prestamo", label: "🏦 Préstamo" },
-    { value: "tarjeta", label: "💳 Tarjeta" },
-    { value: "servicio", label: "⚡ Servicio" },
-    { value: "alquiler", label: "🏠 Alquiler" },
-    { value: "salud", label: "🏥 Salud" },
-    { value: "mascotas", label: "🐾 Mascotas" },
-    { value: "educacion", label: "📚 Educación" },
-    { value: "otro", label: "📋 Otro" },
-];
+const FORM_INICIAL: FormData = {
+    nombre: "", categoria: "suscripcion", monto: "",
+    frecuencia: "mensual", proximaFecha: "",
+    diasAntes: "", notas: "", icono: "", categoriaPersonalizada: "",
+};
 
-const FRECUENCIA_OPTIONS = [
-    { value: "semanal", label: "Semanal" },
-    { value: "quincenal", label: "Quincenal" },
-    { value: "mensual", label: "Mensual" },
-    { value: "bimestral", label: "Bimestral" },
-    { value: "trimestral", label: "Trimestral" },
-    { value: "semestral", label: "Semestral" },
-    { value: "anual", label: "Anual" },
-];
-
-const DIAS_OPTIONS = [
-    { value: "", label: "Sin recordatorio" },
-    { value: "1", label: "1 día antes" },
-    { value: "2", label: "2 días antes" },
-    { value: "3", label: "3 días antes" },
-    { value: "5", label: "5 días antes" },
-    { value: "7", label: "1 semana antes" },
-];
-
-const SUGERENCIAS: { nombre: string; icono: string; categoria: string }[] = [
-    { nombre: "Netflix", icono: "🎬", categoria: "suscripcion" },
-    { nombre: "Spotify", icono: "🎵", categoria: "suscripcion" },
-    { nombre: "Disney+", icono: "🏰", categoria: "suscripcion" },
-    { nombre: "HBO Max", icono: "📺", categoria: "suscripcion" },
-    { nombre: "Amazon Prime", icono: "📦", categoria: "suscripcion" },
-    { nombre: "YouTube Premium", icono: "▶️", categoria: "suscripcion" },
-    { nombre: "Apple Music", icono: "🍎", categoria: "suscripcion" },
-    { nombre: "iCloud", icono: "☁️", categoria: "suscripcion" },
-    { nombre: "ChatGPT", icono: "🤖", categoria: "suscripcion" },
-    { nombre: "Gimnasio", icono: "💪", categoria: "suscripcion" },
-    { nombre: "Gollo", icono: "🏪", categoria: "prestamo" },
-    { nombre: "Mexpress", icono: "🛒", categoria: "prestamo" },
-    { nombre: "Importadora", icono: "🏬", categoria: "prestamo" },
-    { nombre: "Banco Nacional", icono: "🏦", categoria: "prestamo" },
-    { nombre: "BAC", icono: "💳", categoria: "tarjeta" },
-    { nombre: "BCR", icono: "💳", categoria: "tarjeta" },
-    { nombre: "Scotiabank", icono: "💳", categoria: "tarjeta" },
-    { nombre: "Tarjeta Credito", icono: "💳", categoria: "tarjeta" },
-    { nombre: "CCSS", icono: "🏥", categoria: "servicio" },
-    { nombre: "INS", icono: "🛡️", categoria: "servicio" },
-    { nombre: "Agua", icono: "💧", categoria: "servicio" },
-    { nombre: "Luz", icono: "⚡", categoria: "servicio" },
-    { nombre: "Internet", icono: "🌐", categoria: "servicio" },
-    { nombre: "Teléfono", icono: "📱", categoria: "servicio" },
-    { nombre: "Alquiler", icono: "🏠", categoria: "alquiler" },
-    { nombre: "Condominio", icono: "🏢", categoria: "alquiler" },
-    { nombre: "Medicamentos", icono: "💊", categoria: "salud" },
-    { nombre: "Seguro médico", icono: "🏥", categoria: "salud" },
-    { nombre: "Cita médica", icono: "👨‍⚕️", categoria: "salud" },
-    { nombre: "Vitaminas", icono: "💊", categoria: "salud" },
-    { nombre: "Farmacia", icono: "💊", categoria: "salud" },
-    { nombre: "Concentrado", icono: "🐾", categoria: "mascotas" },
-    { nombre: "Veterinario", icono: "🐕", categoria: "mascotas" },
-    { nombre: "Vacuna mascota", icono: "💉", categoria: "mascotas" },
-    { nombre: "Guardería mascota", icono: "🏠", categoria: "mascotas" },
-    { nombre: "Arena gato", icono: "🐱", categoria: "mascotas" },
-    { nombre: "Colegio", icono: "📚", categoria: "educacion" },
-    { nombre: "Universidad", icono: "🎓", categoria: "educacion" },
-    { nombre: "Curso online", icono: "💻", categoria: "educacion" },
-    { nombre: "Inglés", icono: "🗣️", categoria: "educacion" },
-    { nombre: "Transporte escolar", icono: "🚌", categoria: "educacion" },
-    { nombre: "Seguro", icono: "🛡️", categoria: "otro" },
-];
+const EDIT_FORM_INICIAL: EditFormData = {
+    nombre: "", categoria: "suscripcion", monto: "",
+    frecuencia: "mensual", proximaFecha: "",
+    diasAntes: "", notas: "", icono: "",
+};
 
 export default function CompromisosScreen() {
     const {
         compromisos, addCompromiso, updateCompromiso, deleteCompromiso,
-        marcarPagado, settings, categoriaAbierta, setCategoriaAbierta,
+        marcarPagado, categoriaAbierta, setCategoriaAbierta,
         space, userId, userName,
     } = useStore();
 
     const [errors, setErrors] = useState<Record<string, boolean>>({});
-    const [sugerencias, setSugerencias] = useState<typeof SUGERENCIAS>([]);
     const [tab, setTab] = useState<"activos" | "pausados">("activos");
     const [showForm, setShowForm] = useState(false);
+    const [form, setForm] = useState<FormData>(FORM_INICIAL);
     const [selected, setSelected] = useState<Compromiso | null>(null);
     const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
     const [editando, setEditando] = useState<Compromiso | null>(null);
-    const [uploading, setUploading] = useState(false);
+    const [editForm, setEditForm] = useState<EditFormData>(EDIT_FORM_INICIAL);
     const [showPago, setShowPago] = useState<Compromiso | null>(null);
+    const [pagoForm, setPagoForm] = useState<PagoFormData>({ notas: "", referencia: "", comprobante: "" });
     const [showCompartir, setShowCompartir] = useState<Compromiso | null>(null);
-    const [compartirCode, setCompartirCode] = useState("");
-    const [compartirLoading, setCompartirLoading] = useState(false);
-    const [compartirMsg, setCompartirMsg] = useState<{ ok: boolean; text: string } | null>(null);
     const [categoriasColapsadas, setCategoriasColapsadas] = useState<Record<string, boolean>>({});
-
-    const [form, setForm] = useState({
-        nombre: "", categoria: "suscripcion", monto: "",
-        frecuencia: "mensual", proximaFecha: "",
-        diasAntes: "", notas: "", icono: "", categoriaPersonalizada: "",
-    });
-
-    const [editForm, setEditForm] = useState({
-        nombre: "", categoria: "suscripcion", monto: "",
-        frecuencia: "mensual", proximaFecha: "",
-        diasAntes: "", notas: "", icono: "",
-    });
-
-    const [pagoForm, setPagoForm] = useState({ notas: "", referencia: "", comprobante: "" });
 
     const activos = compromisos.filter((c) => c.estado === "activo");
     const pausados = compromisos.filter((c) => c.estado === "pausado");
     const shown = tab === "activos" ? activos : pausados;
-
-    const resetForm = () => {
-        setErrors({});
-        setForm({
-            nombre: "", categoria: "suscripcion", monto: "",
-            frecuencia: "mensual", proximaFecha: "",
-            diasAntes: "", notas: "", icono: "", categoriaPersonalizada: "",
-        });
-    };
 
     useEffect(() => {
         if (categoriaAbierta) {
@@ -145,6 +59,11 @@ export default function CompromisosScreen() {
             ...prev,
             [cat]: prev[cat] === undefined ? false : !prev[cat],
         }));
+    };
+
+    const resetForm = () => {
+        setErrors({});
+        setForm(FORM_INICIAL);
     };
 
     const handleSubmit = () => {
@@ -212,9 +131,14 @@ export default function CompromisosScreen() {
         setShowPago(null);
     };
 
+    const porCategoria = shown.reduce<Record<string, Compromiso[]>>((acc, c) => {
+        if (!acc[c.categoria]) acc[c.categoria] = [];
+        acc[c.categoria].push(c);
+        return acc;
+    }, {});
+
     return (
         <div className="page fade-in">
-
             {/* Tabs */}
             <div className="tab-pills">
                 <button className={`tab-pill${tab === "activos" ? " active" : ""}`} onClick={() => setTab("activos")}>
@@ -229,7 +153,6 @@ export default function CompromisosScreen() {
                 <Plus size={16} /> Nuevo compromiso
             </button>
 
-            {/* Lista agrupada por categoría */}
             {shown.length === 0 ? (
                 <EmptyState
                     icon={tab === "activos" ? "💳" : "⏸️"}
@@ -237,367 +160,44 @@ export default function CompromisosScreen() {
                     sub={tab === "activos" ? "Agregá tus pagos recurrentes" : ""}
                 />
             ) : (
-                (() => {
-                    const porCategoria = shown.reduce<Record<string, Compromiso[]>>((acc, c) => {
-                        if (!acc[c.categoria]) acc[c.categoria] = [];
-                        acc[c.categoria].push(c);
-                        return acc;
-                    }, {});
-
-                    return Object.entries(porCategoria).map(([cat, items]) => {
-                        const colapsado = categoriasColapsadas[cat] ?? true;
-                        const totalCat = items.reduce((s, c) => s + c.monto, 0);
-
-                        return (
-                            <div key={cat}>
-                                <button
-                                    onClick={() => toggleCategoria(cat)}
-                                    style={{
-                                        width: "100%", display: "flex",
-                                        justifyContent: "space-between", alignItems: "center",
-                                        background: "var(--color-bg-elevated)",
-                                        border: "1px solid var(--color-border)",
-                                        borderRadius: colapsado ? "var(--radius-lg)" : "var(--radius-lg) var(--radius-lg) 0 0",
-                                        padding: "var(--space-3) var(--space-4)",
-                                        cursor: "pointer",
-                                        transition: "border-radius 0.2s",
-                                    }}
-                                >
-                                    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
-                                        <span style={{ fontSize: 20 }}>
-                                            {CATEGORIA_ICONO[cat as keyof typeof CATEGORIA_ICONO] ?? "📋"}
-                                        </span>
-                                        <div style={{ textAlign: "left" }}>
-                                            <p style={{ fontWeight: 700, fontSize: "var(--text-sm)", color: "var(--color-text)" }}>
-                                                {CATEGORIA_LABEL[cat as keyof typeof CATEGORIA_LABEL] ?? cat}
-                                            </p>
-                                            <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)" }}>
-                                                {items.length} compromiso{items.length > 1 ? "s" : ""}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
-                                        <p style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "var(--text-sm)", color: "var(--color-text)" }}>
-                                            {fmt(totalCat)}
-                                        </p>
-                                        <span style={{
-                                            fontSize: 12, color: "var(--color-text-3)",
-                                            transform: colapsado ? "rotate(0deg)" : "rotate(180deg)",
-                                            transition: "transform 0.2s", display: "inline-block",
-                                        }}>▼</span>
-                                    </div>
-                                </button>
-
-                                {!colapsado && (
-                                    <div style={{
-                                        border: "1px solid var(--color-border)",
-                                        borderTop: "none",
-                                        borderRadius: "0 0 var(--radius-lg) var(--radius-lg)",
-                                        overflow: "hidden",
-                                        marginBottom: "var(--space-3)",
-                                    }}>
-                                        {items.map((c, idx) => {
-                                            const dias = diasHastaNum(c.proximaFecha);
-                                            const color = getUrgenciaColor(dias);
-                                            return (
-                                                <div
-                                                    key={c.id}
-                                                    style={{
-                                                        cursor: "pointer",
-                                                        borderLeft: `3px solid ${color}`,
-                                                        borderBottom: idx < items.length - 1 ? "1px solid var(--color-border)" : "none",
-                                                        padding: "var(--space-3) var(--space-4)",
-                                                        background: "var(--color-bg-card)",
-                                                    }}
-                                                    onClick={() => setSelected(c)}
-                                                >
-                                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "var(--space-2)" }}>
-                                                        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
-                                                            <div style={{
-                                                                width: 40, height: 40,
-                                                                borderRadius: "var(--radius-md)",
-                                                                background: "var(--color-bg-elevated)",
-                                                                display: "grid", placeItems: "center",
-                                                                fontSize: 20, border: "1px solid var(--color-border)",
-                                                            }}>
-                                                                {c.icono ?? CATEGORIA_ICONO[c.categoria]}
-                                                            </div>
-                                                            <div>
-                                                                <p style={{ fontWeight: 700, fontSize: "var(--text-sm)", color: "var(--color-text)" }}>
-                                                                    {c.nombre}
-                                                                </p>
-                                                                <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginTop: 2 }}>
-                                                                    <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)" }}>
-                                                                        {FRECUENCIA_LABEL[c.frecuencia]}
-                                                                    </p>
-                                                                    {c.esCompartido && (
-                                                                        <span style={{
-                                                                            fontSize: "var(--text-xs)",
-                                                                            background: "rgba(99,102,241,0.15)",
-                                                                            color: "var(--color-primary)",
-                                                                            padding: "1px 6px",
-                                                                            borderRadius: 99,
-                                                                        }}>🤝 Compartido</span>
-                                                                    )}
-                                                                    {c.compartidoCon && c.compartidoCon.length > 0 && !c.esCompartido && (
-                                                                        <span style={{
-                                                                            fontSize: "var(--text-xs)",
-                                                                            background: "rgba(34,197,94,0.15)",
-                                                                            color: "var(--color-success)",
-                                                                            padding: "1px 6px",
-                                                                            borderRadius: 99,
-                                                                        }}>👥 {c.compartidoCon.length}</span>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                        <div style={{ textAlign: "right" }}>
-                                                            <p style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "var(--text-base)", color: "var(--color-text)" }}>
-                                                                {fmt(c.monto)}
-                                                            </p>
-                                                            <UrgenciaBadge dias={dias} />
-                                                        </div>
-                                                    </div>
-                                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                                        <p style={{ fontSize: "var(--text-xs)", color }}>
-                                                            {diasHasta(c.proximaFecha)} · {fmtDate(c.proximaFecha)}
-                                                        </p>
-                                                    </div>
-                                                    <div style={{
-                                                        height: 3, borderRadius: 2, marginTop: "var(--space-2)",
-                                                        background: `${color}22`, overflow: "hidden",
-                                                    }}>
-                                                        <div style={{
-                                                            height: "100%",
-                                                            width: dias <= 0 ? "100%" : `${Math.max(5, 100 - (dias / 30) * 100)}%`,
-                                                            background: color, borderRadius: 2,
-                                                        }} />
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    });
-                })()
+                Object.entries(porCategoria).map(([cat, items]) => (
+                    <CategoriaGroup
+                        key={cat}
+                        categoria={cat}
+                        items={items}
+                        colapsado={categoriasColapsadas[cat] ?? true}
+                        onToggle={() => toggleCategoria(cat)}
+                        onClickItem={setSelected}
+                    />
+                ))
             )}
 
             {/* Detail Sheet */}
             {selected && (
-                <Sheet title={selected.nombre} onClose={() => setSelected(null)}>
-                    <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}>
-                        <Badge estado={selected.estado} />
-                        <Badge estado={selected.categoria} />
-                        <UrgenciaBadge dias={diasHastaNum(selected.proximaFecha)} />
-                    </div>
-
-                    <div style={{
-                        background: "var(--color-bg-elevated)",
-                        borderRadius: "var(--radius-md)",
-                        padding: "var(--space-4)", textAlign: "center",
-                    }}>
-                        <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)", marginBottom: 4 }}>Monto</p>
-                        <p style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "var(--text-3xl)", color: "var(--color-primary)" }}>
-                            {fmt(selected.monto)}
-                        </p>
-                    </div>
-
-                    {[
-                        ["Frecuencia", FRECUENCIA_LABEL[selected.frecuencia]],
-                        ["Próximo pago", fmtDate(selected.proximaFecha)],
-                        ["Vence", diasHasta(selected.proximaFecha)],
-                        ["Recordatorio", selected.diasAntes ? `${selected.diasAntes} día${selected.diasAntes !== 1 ? "s" : ""} antes` : "Sin recordatorio"],
-                        ["Notas", selected.notas ?? "-"],
-                    ].map(([l, v]) => (
-                        <div key={l as string} style={{
-                            display: "flex", justifyContent: "space-between",
-                            padding: "var(--space-2) 0", borderBottom: "1px solid var(--color-border)",
-                        }}>
-                            <span style={{ fontSize: "var(--text-sm)", color: "var(--color-text-3)" }}>{l}</span>
-                            <span style={{ fontSize: "var(--text-sm)", fontWeight: 600, color: "var(--color-text)", textAlign: "right", maxWidth: "60%" }}>{v}</span>
-                        </div>
-                    ))}
-
-                    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)", marginTop: "var(--space-2)" }}>
-                        {selected.estado === "activo" && (
-                            <button
-                                className="btn btn-primary"
-                                style={{ width: "100%" }}
-                                onClick={() => { setShowPago(selected); setSelected(null); }}
-                            >
-                                <CheckCircle size={16} /> ✅ Marcar como pagado
-                            </button>
-                        )}
-                        <button
-                            className="btn btn-secondary"
-                            style={{ width: "100%" }}
-                            onClick={() => {
-                                updateCompromiso(selected.id, { estado: selected.estado === "activo" ? "pausado" : "activo" });
-                                setSelected(null);
-                            }}
-                        >
-                            {selected.estado === "activo" ? <><Pause size={14} /> Pausar</> : <><Play size={14} /> Reactivar</>}
-                        </button>
-                        <button
-                            className="btn btn-secondary"
-                            style={{ width: "100%" }}
-                            onClick={() => handleEditar(selected)}
-                        >
-                            ✏️ Editar
-                        </button>
-                        {selected.estado === "activo" && !selected.esCompartido && (
-                            <button
-                                className="btn btn-secondary"
-                                style={{ width: "100%" }}
-                                onClick={() => { setShowCompartir(selected); setSelected(null); }}
-                            >
-                                🤝 Compartir con alguien
-                            </button>
-                        )}
-                        <button
-                            className="btn btn-ghost"
-                            style={{ width: "100%", color: "var(--color-danger)" }}
-                            onClick={() => { setConfirmDelete(selected.id); setSelected(null); }}
-                        >
-                            <Trash2 size={14} /> Eliminar
-                        </button>
-                    </div>
-                </Sheet>
+                <CompromisoDetailSheet
+                    compromiso={selected}
+                    onClose={() => setSelected(null)}
+                    onMarcarPagado={() => { setShowPago(selected); setSelected(null); }}
+                    onToggleEstado={() => {
+                        updateCompromiso(selected.id, { estado: selected.estado === "activo" ? "pausado" : "activo" });
+                        setSelected(null);
+                    }}
+                    onEditar={() => handleEditar(selected)}
+                    onCompartir={() => { setShowCompartir(selected); setSelected(null); }}
+                    onEliminar={() => { setConfirmDelete(selected.id); setSelected(null); }}
+                />
             )}
 
             {/* Form Sheet */}
             {showForm && (
-                <Sheet title="Nuevo Compromiso" onClose={() => { setShowForm(false); resetForm(); }}>
-                    <div className="input-group">
-                        <label className="input-label" style={{ color: errors.nombre ? "var(--color-danger)" : "var(--color-primary)" }}>
-                            Nombre {errors.nombre && "— requerido"} *
-                        </label>
-                        <div style={{ position: "relative" }}>
-                            <input
-                                className="input"
-                                value={form.nombre}
-                                placeholder="Ej: Netflix, Gollo, CCSS..."
-                                style={{ borderColor: errors.nombre ? "var(--color-danger)" : undefined }}
-                                onChange={(e) => {
-                                    const val = e.target.value;
-                                    setForm({ ...form, nombre: val });
-                                    if (errors.nombre) setErrors({ ...errors, nombre: false });
-                                    setSugerencias(
-                                        val.length > 0
-                                            ? SUGERENCIAS.filter((s) => s.nombre.toLowerCase().includes(val.toLowerCase())).slice(0, 5)
-                                            : SUGERENCIAS
-                                    );
-                                }}
-                                onFocus={() => setSugerencias(SUGERENCIAS)}
-                                onBlur={() => setTimeout(() => setSugerencias([]), 150)}
-                            />
-                            {sugerencias.length > 0 && (
-                                <div style={{
-                                    position: "absolute",
-                                    top: "calc(100% + 4px)", left: 0, right: 0,
-                                    background: "var(--color-bg-elevated)",
-                                    border: "1px solid var(--color-border-2)",
-                                    borderRadius: "var(--radius-md)",
-                                    zIndex: 100, maxHeight: 280, overflowY: "auto",
-                                }}>
-                                    {["suscripcion", "prestamo", "tarjeta", "servicio", "alquiler", "salud", "mascotas", "educacion", "otro"].map((cat) => {
-                                        const items = sugerencias.filter((s) => s.categoria === cat);
-                                        if (items.length === 0) return null;
-                                        const catLabels: Record<string, string> = {
-                                            suscripcion: "📺 Suscripciones", prestamo: "🏦 Préstamos",
-                                            tarjeta: "💳 Tarjetas", servicio: "⚡ Servicios",
-                                            alquiler: "🏠 Alquiler", salud: "🏥 Salud",
-                                            mascotas: "🐾 Mascotas", educacion: "📚 Educación",
-                                            otro: "📋 Otro",
-                                        };
-                                        return (
-                                            <div key={cat}>
-                                                <p style={{
-                                                    padding: "6px var(--space-4) 2px",
-                                                    fontSize: "var(--text-xs)", color: "var(--color-primary)",
-                                                    fontWeight: 700, letterSpacing: "0.08em",
-                                                    textTransform: "uppercase", background: "var(--color-bg-card)",
-                                                }}>
-                                                    {catLabels[cat]}
-                                                </p>
-                                                {items.map((s) => (
-                                                    <button
-                                                        key={s.nombre}
-                                                        style={{
-                                                            width: "100%", textAlign: "left",
-                                                            padding: "10px var(--space-4)",
-                                                            background: "transparent", border: "none",
-                                                            borderBottom: "1px solid var(--color-border)",
-                                                            color: "var(--color-text)", cursor: "pointer",
-                                                            display: "flex", alignItems: "center",
-                                                            gap: "var(--space-3)", fontSize: "var(--text-sm)",
-                                                        }}
-                                                        onMouseDown={() => {
-                                                            setForm({ ...form, nombre: s.nombre, icono: s.icono, categoria: s.categoria });
-                                                            setSugerencias([]);
-                                                        }}
-                                                    >
-                                                        <span style={{ fontSize: 20 }}>{s.icono}</span>
-                                                        {s.nombre}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    <Select label="Categoría" value={form.categoria} onChange={(v) => setForm({ ...form, categoria: v })} options={CATEGORIA_OPTIONS} required />
-
-                    {form.categoria === "otro" && (
-                        <div className="input-group">
-                            <label className="input-label">¿Qué tipo de gasto es?</label>
-                            <input className="input" value={form.categoriaPersonalizada}
-                                onChange={(e) => setForm({ ...form, categoriaPersonalizada: e.target.value })}
-                                placeholder="Ej: Hobby, Deporte, Religión..." />
-                        </div>
-                    )}
-
-                    <div className="input-group">
-                        <label className="input-label" style={{ color: errors.monto ? "var(--color-danger)" : "var(--color-primary)" }}>
-                            Monto (₡) {errors.monto && "— requerido"} *
-                        </label>
-                        <input className="input" type="number" value={form.monto} placeholder="0"
-                            style={{ borderColor: errors.monto ? "var(--color-danger)" : undefined }}
-                            onChange={(e) => { setForm({ ...form, monto: e.target.value }); if (errors.monto) setErrors({ ...errors, monto: false }); }} />
-                    </div>
-
-                    <Select label="Frecuencia" value={form.frecuencia} onChange={(v) => setForm({ ...form, frecuencia: v })} options={FRECUENCIA_OPTIONS} required />
-
-                    <div className="input-group">
-                        <label className="input-label" style={{ color: errors.proximaFecha ? "var(--color-danger)" : "var(--color-primary)" }}>
-                            Próxima fecha de pago {errors.proximaFecha && "— requerida"} *
-                        </label>
-                        <input className="input" type="date" value={form.proximaFecha}
-                            style={{ borderColor: errors.proximaFecha ? "var(--color-danger)" : undefined }}
-                            onChange={(e) => { setForm({ ...form, proximaFecha: e.target.value }); if (errors.proximaFecha) setErrors({ ...errors, proximaFecha: false }); }} />
-                    </div>
-
-                    <Select label="Recordarme" value={form.diasAntes} onChange={(v) => setForm({ ...form, diasAntes: v })} options={DIAS_OPTIONS} />
-
-                    <div className="input-group">
-                        <label className="input-label">Emoji personalizado (opcional)</label>
-                        <input className="input" value={form.icono} onChange={(e) => setForm({ ...form, icono: e.target.value })} placeholder="Ej: 🎵 💡 🏠" />
-                    </div>
-
-                    <div className="input-group">
-                        <label className="input-label">Notas (opcional)</label>
-                        <input className="input" value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} placeholder="Observaciones..." />
-                    </div>
-
-                    <button className="btn btn-primary" style={{ width: "100%" }} onClick={handleSubmit}>
-                        Guardar compromiso
-                    </button>
-                </Sheet>
+                <CompromisoFormSheet
+                    form={form}
+                    onFormChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
+                    onSubmit={handleSubmit}
+                    onClose={() => { setShowForm(false); resetForm(); }}
+                    errors={errors}
+                    onClearError={(field) => setErrors((prev) => ({ ...prev, [field]: false }))}
+                />
             )}
 
             {/* Confirm delete */}
@@ -611,185 +211,35 @@ export default function CompromisosScreen() {
 
             {/* Edit Sheet */}
             {editando && (
-                <Sheet title="Editar Compromiso" onClose={() => setEditando(null)}>
-                    <div className="input-group">
-                        <label className="input-label">Nombre *</label>
-                        <input className="input" value={editForm.nombre} onChange={(e) => setEditForm({ ...editForm, nombre: e.target.value })} />
-                    </div>
-                    <Select label="Categoría" value={editForm.categoria} onChange={(v) => setEditForm({ ...editForm, categoria: v })} options={CATEGORIA_OPTIONS} />
-                    <div className="input-group">
-                        <label className="input-label">Monto (₡) *</label>
-                        <input className="input" type="number" value={editForm.monto} onChange={(e) => setEditForm({ ...editForm, monto: e.target.value })} />
-                    </div>
-                    <Select label="Frecuencia" value={editForm.frecuencia} onChange={(v) => setEditForm({ ...editForm, frecuencia: v })} options={FRECUENCIA_OPTIONS} />
-                    <div className="input-group">
-                        <label className="input-label">Próxima fecha de pago *</label>
-                        <input className="input" type="date" value={editForm.proximaFecha} onChange={(e) => setEditForm({ ...editForm, proximaFecha: e.target.value })} />
-                    </div>
-                    <Select label="Recordarme" value={editForm.diasAntes} onChange={(v) => setEditForm({ ...editForm, diasAntes: v })} options={DIAS_OPTIONS} />
-                    <div className="input-group">
-                        <label className="input-label">Emoji personalizado</label>
-                        <input className="input" value={editForm.icono} onChange={(e) => setEditForm({ ...editForm, icono: e.target.value })} placeholder="Ej: 🎵 💡 🏠" />
-                    </div>
-                    <div className="input-group">
-                        <label className="input-label">Notas</label>
-                        <input className="input" value={editForm.notas} onChange={(e) => setEditForm({ ...editForm, notas: e.target.value })} placeholder="Observaciones..." />
-                    </div>
-                    <button className="btn btn-primary" style={{ width: "100%" }} onClick={handleGuardarEdicion}>
-                        Guardar cambios
-                    </button>
-                </Sheet>
+                <CompromisoEditSheet
+                    form={editForm}
+                    onFormChange={(patch) => setEditForm((prev) => ({ ...prev, ...patch }))}
+                    onGuardar={handleGuardarEdicion}
+                    onClose={() => setEditando(null)}
+                />
             )}
 
             {/* Pago Sheet */}
             {showPago && (
-                <Sheet title="Registrar pago" onClose={() => setShowPago(null)}>
-                    <div style={{
-                        background: "var(--color-bg-elevated)", borderRadius: "var(--radius-md)",
-                        padding: "var(--space-4)", textAlign: "center", marginBottom: "var(--space-2)",
-                    }}>
-                        <p style={{ fontSize: 32, marginBottom: "var(--space-2)" }}>
-                            {showPago.icono ?? CATEGORIA_ICONO[showPago.categoria]}
-                        </p>
-                        <p style={{ fontFamily: "var(--font-display)", fontWeight: 700, color: "var(--color-text)" }}>{showPago.nombre}</p>
-                        <p style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "var(--text-2xl)", color: "var(--color-primary)", marginTop: 4 }}>
-                            {fmt(showPago.monto)}
-                        </p>
-                    </div>
-
-                    <div className="input-group">
-                        <label className="input-label">Referencia / comprobante (opcional)</label>
-                        <input className="input" value={pagoForm.referencia}
-                            onChange={(e) => setPagoForm({ ...pagoForm, referencia: e.target.value })}
-                            placeholder="Ej: #123456, transferencia SINPE..." />
-                    </div>
-
-                    <div className="input-group">
-                        <label className="input-label">Notas (opcional)</label>
-                        <input className="input" value={pagoForm.notas}
-                            onChange={(e) => setPagoForm({ ...pagoForm, notas: e.target.value })}
-                            placeholder="Observaciones del pago..." />
-                    </div>
-
-                    <div className="input-group">
-                        <label className="input-label">Foto del comprobante (opcional)</label>
-                        {pagoForm.comprobante ? (
-                            <div style={{ position: "relative" }}>
-                                <img src={pagoForm.comprobante} alt="Comprobante" style={{
-                                    width: "100%", borderRadius: "var(--radius-md)",
-                                    border: "1px solid var(--color-border)", maxHeight: 200, objectFit: "cover",
-                                }} />
-                                <button className="btn btn-ghost" style={{
-                                    position: "absolute", top: 8, right: 8, padding: "4px 8px",
-                                    minHeight: 0, background: "rgba(0,0,0,0.6)", color: "var(--color-danger)",
-                                }} onClick={() => setPagoForm({ ...pagoForm, comprobante: "" })}>✕</button>
-                            </div>
-                        ) : (
-                            <label style={{
-                                display: "flex", flexDirection: "column", alignItems: "center",
-                                justifyContent: "center", gap: "var(--space-2)",
-                                border: "2px dashed var(--color-border-2)", borderRadius: "var(--radius-md)",
-                                padding: "var(--space-6)", cursor: uploading ? "not-allowed" : "pointer",
-                                opacity: uploading ? 0.6 : 1,
-                            }}>
-                                <span style={{ fontSize: 32 }}>{uploading ? "⏳" : "📷"}</span>
-                                <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-3)" }}>
-                                    {uploading ? "Subiendo..." : "Tocá para subir foto"}
-                                </p>
-                                <input type="file" accept="image/*" style={{ display: "none" }} disabled={uploading}
-                                    onChange={async (e) => {
-                                        const file = e.target.files?.[0];
-                                        if (!file) return;
-                                        setUploading(true);
-                                        try {
-                                            const url = await uploadComprobante(file);
-                                            setPagoForm({ ...pagoForm, comprobante: url });
-                                        } catch { console.error("Error subiendo imagen"); }
-                                        finally { setUploading(false); }
-                                    }} />
-                            </label>
-                        )}
-                    </div>
-
-                    <button className="btn btn-primary" style={{ width: "100%" }} disabled={uploading} onClick={handleConfirmarPago}>
-                        ✅ Confirmar pago
-                    </button>
-                    <button className="btn btn-ghost" style={{ width: "100%" }}
-                        onClick={() => { marcarPagado(showPago.id); setShowPago(null); }}>
-                        Marcar pagado sin notas
-                    </button>
-                </Sheet>
+                <PagoSheet
+                    compromiso={showPago}
+                    form={pagoForm}
+                    onFormChange={(patch) => setPagoForm((prev) => ({ ...prev, ...patch }))}
+                    onConfirmar={handleConfirmarPago}
+                    onMarcarSinNotas={() => { marcarPagado(showPago.id); setShowPago(null); }}
+                    onClose={() => setShowPago(null)}
+                />
             )}
 
             {/* Compartir Sheet */}
             {showCompartir && (
-                <Sheet title="Compartir compromiso" onClose={() => { setShowCompartir(null); setCompartirCode(""); setCompartirMsg(null); }}>
-                    <div style={{
-                        background: "var(--color-bg-elevated)", borderRadius: "var(--radius-md)",
-                        padding: "var(--space-4)", textAlign: "center", marginBottom: "var(--space-4)",
-                    }}>
-                        <p style={{ fontSize: 32, marginBottom: "var(--space-2)" }}>
-                            {showCompartir.icono ?? CATEGORIA_ICONO[showCompartir.categoria]}
-                        </p>
-                        <p style={{ fontFamily: "var(--font-display)", fontWeight: 700, color: "var(--color-text)" }}>
-                            {showCompartir.nombre}
-                        </p>
-                        <p style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "var(--text-2xl)", color: "var(--color-primary)", marginTop: 4 }}>
-                            {fmt(showCompartir.monto)}
-                        </p>
-                    </div>
-
-                    <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-2)", marginBottom: "var(--space-4)", lineHeight: 1.6 }}>
-                        Ingresá el código de invitación de la persona con quien querés compartir este compromiso. Ambos recibirán recordatorios.
-                    </p>
-
-                    <div className="input-group">
-                        <label className="input-label">Código de la otra persona</label>
-                        <input
-                            className="input"
-                            value={compartirCode}
-                            onChange={(e) => { setCompartirCode(e.target.value.toUpperCase()); setCompartirMsg(null); }}
-                            placeholder="Ej: ABC123"
-                            maxLength={6}
-                            style={{ letterSpacing: "0.15em", fontWeight: 700, textTransform: "uppercase" }}
-                        />
-                    </div>
-
-                    {compartirMsg && (
-                        <p style={{
-                            fontSize: "var(--text-sm)",
-                            color: compartirMsg.ok ? "var(--color-success)" : "var(--color-danger)",
-                            marginBottom: "var(--space-2)",
-                        }}>
-                            {compartirMsg.ok ? "✅" : "❌"} {compartirMsg.text}
-                        </p>
-                    )}
-
-                    <button
-                        className="btn btn-primary"
-                        style={{ width: "100%" }}
-                        disabled={compartirLoading || compartirCode.length < 6}
-                        onClick={async () => {
-                            if (!showCompartir || !space) return;
-                            setCompartirLoading(true);
-                            const result = await sharingService.compartirCompromiso(
-                                space.id,
-                                showCompartir.id,
-                                userId!,
-                                userName!,
-                                compartirCode,
-                            );
-                            setCompartirMsg({ ok: result.ok, text: result.error ?? "¡Compartido exitosamente!" });
-                            setCompartirLoading(false);
-                            if (result.ok) {
-                                setCompartirCode("");
-                                setTimeout(() => { setShowCompartir(null); setCompartirMsg(null); }, 2000);
-                            }
-                        }}
-                    >
-                        {compartirLoading ? "Compartiendo..." : "Compartir"}
-                    </button>
-                </Sheet>
+                <CompartirSheet
+                    compromiso={showCompartir}
+                    space={space}
+                    userId={userId}
+                    userName={userName}
+                    onClose={() => setShowCompartir(null)}
+                />
             )}
         </div>
     );
