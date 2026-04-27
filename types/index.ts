@@ -95,6 +95,8 @@ export interface Compromiso {
     compromisoOriginalId?: string; // id del compromiso en el space del dueño
     compartidoCon?: string[];                    // userIds con quienes está compartido
     compartidoConSpaces?: Record<string, string>; // { [userId]: spaceId } del destinatario
+    // docId de la copia en el space del destinatario — permite borrado directo
+    compartidoConDocIds?: Record<string, string>; // { [userId]: docId }
     esCompartido?: boolean;                      // true si es un compromiso compartido con este usuario
     creadoEn?: any;
     actualizadoEn?: any;

@@ -166,7 +166,11 @@ export const useStore = create<AppStore>()((set, get) => ({
             fetch("/api/sharing/delete-copies", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ compromisoId: id }),
+                body: JSON.stringify({
+                    compromisoId: id,
+                    compartidoConSpaces: compromiso.compartidoConSpaces ?? {},
+                    compartidoConDocIds: compromiso.compartidoConDocIds ?? {},
+                }),
             }).catch(console.error);
         }
     },

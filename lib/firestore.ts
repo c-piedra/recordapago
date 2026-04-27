@@ -194,16 +194,11 @@ export const sharingService = {
 
             const toSpaceId = snap.docs[0].id;
             const compartidoConSpaces: Record<string, string> = current.compartidoConSpaces ?? {};
+            const compartidoConDocIds: Record<string, string> = current.compartidoConDocIds ?? {};
 
-            await updateDoc(compRef, {
-                compartidoCon: [...compartidoCon, toUserId],
-                compartidoConSpaces: { ...compartidoConSpaces, [toUserId]: toSpaceId },
-                spaceOwner: fromUserId,
-            });
-
-            // Copiar el compromiso al space del destinatario como referencia
+            // Copiar el compromiso al space del destinatario y capturar el docId
             const compData = compSnap.data();
-            await addDoc(spaceCol(snap.docs[0].id, "compromisos"), cleanData({
+            const copyRef = await addDoc(spaceCol(toSpaceId, "compromisos"), cleanData({
                 ...compData,
                 esCompartido: true,
                 spaceOwner: fromUserId,
@@ -212,6 +207,14 @@ export const sharingService = {
                 compartidoCon: [toUserId],
                 creadoEn: serverTimestamp(),
             }));
+
+            // Guardar spaceId y docId del destinatario en el compromiso original
+            await updateDoc(compRef, {
+                compartidoCon: [...compartidoCon, toUserId],
+                compartidoConSpaces: { ...compartidoConSpaces, [toUserId]: toSpaceId },
+                compartidoConDocIds: { ...compartidoConDocIds, [toUserId]: copyRef.id },
+                spaceOwner: fromUserId,
+            });
 
             return { ok: true };
         } catch (err) {
