@@ -163,7 +163,11 @@ export const useStore = create<AppStore>()((set, get) => ({
         compromisosService.delete(space.id, id).catch(console.error);
         // Si estaba compartido, borrar las copias en los spaces de los destinatarios
         if (compromiso && (compromiso.compartidoCon?.length ?? 0) > 0) {
-            sharingService.deleteSharedCopies(id, compromiso.compartidoCon!).catch(console.error);
+            sharingService.deleteSharedCopies(
+                id,
+                compromiso.compartidoCon!,
+                compromiso.compartidoConSpaces ?? {},
+            ).catch(console.error);
         }
     },
 

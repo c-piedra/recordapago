@@ -93,8 +93,9 @@ export interface Compromiso {
     spaceOwner?: string;           // userId del dueño original
     spaceOwnerId?: string;         // spaceId del dueño original
     compromisoOriginalId?: string; // id del compromiso en el space del dueño
-    compartidoCon?: string[];      // userIds con quienes está compartido
-    esCompartido?: boolean;        // true si es un compromiso compartido con este usuario
+    compartidoCon?: string[];                    // userIds con quienes está compartido
+    compartidoConSpaces?: Record<string, string>; // { [userId]: spaceId } del destinatario
+    esCompartido?: boolean;                      // true si es un compromiso compartido con este usuario
     creadoEn?: any;
     actualizadoEn?: any;
 }

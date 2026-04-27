@@ -192,8 +192,12 @@ export const sharingService = {
             const compartidoCon: string[] = current.compartidoCon ?? [];
             if (compartidoCon.includes(toUserId)) return { ok: false, error: "Ya está compartido con ese usuario" };
 
+            const toSpaceId = snap.docs[0].id;
+            const compartidoConSpaces: Record<string, string> = current.compartidoConSpaces ?? {};
+
             await updateDoc(compRef, {
                 compartidoCon: [...compartidoCon, toUserId],
+                compartidoConSpaces: { ...compartidoConSpaces, [toUserId]: toSpaceId },
                 spaceOwner: fromUserId,
             });
 
@@ -226,13 +230,24 @@ export const sharingService = {
         await updateDoc(compRef, { compartidoCon });
     },
 
-    // Borrar las copias compartidas del compromiso en los spaces de los destinatarios
-    async deleteSharedCopies(compromisoId: string, compartidoCon: string[]): Promise<void> {
+    // Borrar las copias compartidas del compromiso en los spaces de los destinatarios.
+    // compartidoConSpaces: { [userId]: spaceId } guardado al momento de compartir.
+    // Como fallback también busca en settings del usuario por si el mapa no está.
+    async deleteSharedCopies(
+        compromisoId: string,
+        compartidoCon: string[],
+        compartidoConSpaces: Record<string, string> = {},
+    ): Promise<void> {
         for (const userId of compartidoCon) {
             try {
-                const settingsSnap = await getDoc(doc(db, "users", userId, "settings", "main"));
-                if (!settingsSnap.exists()) continue;
-                const spaceId = settingsSnap.data()?.spaceId as string | undefined;
+                // Prioridad: spaceId guardado al compartir
+                let spaceId: string | undefined = compartidoConSpaces[userId];
+
+                // Fallback: buscar en settings del usuario
+                if (!spaceId) {
+                    const settingsSnap = await getDoc(doc(db, "users", userId, "settings", "main"));
+                    spaceId = settingsSnap.exists() ? settingsSnap.data()?.spaceId : undefined;
+                }
                 if (!spaceId) continue;
 
                 const copies = await getDocs(
