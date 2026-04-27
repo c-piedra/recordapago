@@ -1,7 +1,7 @@
 "use client";
 import { create } from "zustand";
 import type { Compromiso, HistorialPago, AppSettings, Space, PerfilFinanciero } from "@/types";
-import { compromisosService, historialService, settingsService, spacesService, sharingService } from "@/lib/firestore";
+import { compromisosService, historialService, settingsService, spacesService } from "@/lib/firestore";
 import { calcProximaFecha } from "@/lib/utils";
 
 interface AppStore {
@@ -161,13 +161,13 @@ export const useStore = create<AppStore>()((set, get) => ({
         const compromiso = get().compromisos.find((c) => c.id === id);
         set((s) => ({ compromisos: s.compromisos.filter((c) => c.id !== id) }));
         compromisosService.delete(space.id, id).catch(console.error);
-        // Si estaba compartido, borrar las copias en los spaces de los destinatarios
+        // Si estaba compartido, borrar las copias vía API (Admin SDK, sin restricciones de rules)
         if (compromiso && (compromiso.compartidoCon?.length ?? 0) > 0) {
-            sharingService.deleteSharedCopies(
-                id,
-                compromiso.compartidoCon!,
-                compromiso.compartidoConSpaces ?? {},
-            ).catch(console.error);
+            fetch("/api/sharing/delete-copies", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ compromisoId: id }),
+            }).catch(console.error);
         }
     },
 
