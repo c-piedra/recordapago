@@ -168,6 +168,7 @@ export const useStore = create<AppStore>()((set, get) => ({
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     compromisoId: id,
+                    compartidoCon: compromiso.compartidoCon ?? [],
                     compartidoConSpaces: compromiso.compartidoConSpaces ?? {},
                     compartidoConDocIds: compromiso.compartidoConDocIds ?? {},
                 }),
