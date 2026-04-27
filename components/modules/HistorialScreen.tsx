@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useStore } from "@/store";
 import { EmptyState, ConfirmDialog } from "@/components/ui";
 import HistorialHeroCard from "./historial/HistorialHeroCard";
-import HistorialMesGroup from "./historial/HistorialMesGroup";
+import HistorialCategoriaGroup from "./historial/HistorialCategoriaGroup";
 import HistorialDetailSheet from "./historial/HistorialDetailSheet";
 import type { HistorialPago } from "@/types";
 
@@ -11,19 +11,34 @@ export default function HistorialScreen() {
     const { historial, compromisos, deleteHistorial } = useStore();
     const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
     const [selectedHistorial, setSelectedHistorial] = useState<HistorialPago | null>(null);
+    const [categoriasColapsadas, setCategoriasColapsadas] = useState<Record<string, boolean>>({});
 
     const getCompromiso = (id: string) => compromisos.find((c) => c.id === id);
 
-    const porMes = historial.reduce<Record<string, HistorialPago[]>>((acc, h) => {
-        const mes = h.fecha.slice(0, 7);
-        if (!acc[mes]) acc[mes] = [];
-        acc[mes].push(h);
+    // Total pagado este mes
+    const mesActual = new Date().toISOString().slice(0, 7);
+    const pagosEsteMes = historial.filter((h) => h.fecha.startsWith(mesActual));
+    const totalEsteMes = pagosEsteMes.reduce((s, h) => s + h.monto, 0);
+
+    // Agrupar por categoría del compromiso (fallback: "otro")
+    const porCategoria = historial.reduce<Record<string, HistorialPago[]>>((acc, h) => {
+        const cat = getCompromiso(h.compromisoId)?.categoria ?? "otro";
+        if (!acc[cat]) acc[cat] = [];
+        acc[cat].push(h);
         return acc;
     }, {});
 
-    const mesActual = new Date().toISOString().slice(0, 7);
-    const pagosEsteMes = porMes[mesActual] ?? [];
-    const totalEsteMes = pagosEsteMes.reduce((s, h) => s + h.monto, 0);
+    // Ordenar pagos dentro de cada categoría por fecha descendente
+    Object.values(porCategoria).forEach((pagos) =>
+        pagos.sort((a, b) => b.fecha.localeCompare(a.fecha))
+    );
+
+    const toggleCategoria = (cat: string) => {
+        setCategoriasColapsadas((prev) => ({
+            ...prev,
+            [cat]: prev[cat] === undefined ? false : !prev[cat],
+        }));
+    };
 
     return (
         <div className="page fade-in">
@@ -39,17 +54,17 @@ export default function HistorialScreen() {
                     sub="Cuando marqués un compromiso como pagado aparecerá aquí"
                 />
             ) : (
-                Object.entries(porMes)
-                    .sort(([a], [b]) => b.localeCompare(a))
-                    .map(([mes, pagos]) => (
-                        <HistorialMesGroup
-                            key={mes}
-                            mes={mes}
-                            pagos={pagos}
-                            getCompromiso={getCompromiso}
-                            onClickPago={setSelectedHistorial}
-                        />
-                    ))
+                Object.entries(porCategoria).map(([cat, pagos]) => (
+                    <HistorialCategoriaGroup
+                        key={cat}
+                        categoria={cat}
+                        pagos={pagos}
+                        colapsado={categoriasColapsadas[cat] ?? true}
+                        onToggle={() => toggleCategoria(cat)}
+                        getCompromiso={getCompromiso}
+                        onClickPago={setSelectedHistorial}
+                    />
+                ))
             )}
 
             {confirmDelete && (

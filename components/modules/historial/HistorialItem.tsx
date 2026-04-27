@@ -10,8 +10,12 @@ interface HistorialItemProps {
 export default function HistorialItem({ pago: h, compromiso: comp, onClick }: HistorialItemProps) {
     return (
         <div
-            className="list-item"
-            style={{ cursor: "pointer" }}
+            style={{
+                cursor: "pointer",
+                padding: "var(--space-3) var(--space-4)",
+                background: "var(--color-bg-card)",
+                borderBottom: "1px solid var(--color-border)",
+            }}
             onClick={onClick}
         >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
