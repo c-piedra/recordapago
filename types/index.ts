@@ -90,9 +90,11 @@ export interface Compromiso {
     cuotasPagadas?: number;
     fechaFinEstimada?: string;
     // Sharing selectivo
-    spaceOwner?: string;        // userId del dueño
-    compartidoCon?: string[];   // userIds con quienes está compartido
-    esCompartido?: boolean;     // true si es un compromiso compartido con este usuario
+    spaceOwner?: string;           // userId del dueño original
+    spaceOwnerId?: string;         // spaceId del dueño original
+    compromisoOriginalId?: string; // id del compromiso en el space del dueño
+    compartidoCon?: string[];      // userIds con quienes está compartido
+    esCompartido?: boolean;        // true si es un compromiso compartido con este usuario
     creadoEn?: any;
     actualizadoEn?: any;
 }

@@ -1,10 +1,15 @@
 import { fmt, CATEGORIA_LABEL, CATEGORIA_ICONO } from "@/lib/utils";
 import type { HistorialPago, Compromiso } from "@/types";
 import HistorialItem from "./HistorialItem";
+import HistorialPagoGrupal from "./HistorialPagoGrupal";
+
+export type EntradaHistorial =
+    | { tipo: "individual"; pago: HistorialPago }
+    | { tipo: "grupal"; compromisoId: string; compromisoNombre: string; pagos: HistorialPago[] };
 
 interface HistorialCategoriaGroupProps {
     categoria: string;
-    pagos: HistorialPago[];
+    entradas: EntradaHistorial[];
     colapsado: boolean;
     onToggle: () => void;
     getCompromiso: (id: string) => Compromiso | undefined;
@@ -13,13 +18,21 @@ interface HistorialCategoriaGroupProps {
 
 export default function HistorialCategoriaGroup({
     categoria: cat,
-    pagos,
+    entradas,
     colapsado,
     onToggle,
     getCompromiso,
     onClickPago,
 }: HistorialCategoriaGroupProps) {
-    const total = pagos.reduce((s, h) => s + h.monto, 0);
+    const total = entradas.reduce((s, e) =>
+        e.tipo === "individual"
+            ? s + e.pago.monto
+            : s + e.pagos.reduce((ss, p) => ss + p.monto, 0),
+        0
+    );
+    const cantPagos = entradas.reduce((s, e) =>
+        e.tipo === "individual" ? s + 1 : s + e.pagos.length, 0
+    );
 
     return (
         <div>
@@ -45,7 +58,7 @@ export default function HistorialCategoriaGroup({
                             {CATEGORIA_LABEL[cat as keyof typeof CATEGORIA_LABEL] ?? cat}
                         </p>
                         <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)" }}>
-                            {pagos.length} pago{pagos.length > 1 ? "s" : ""}
+                            {cantPagos} pago{cantPagos > 1 ? "s" : ""}
                         </p>
                     </div>
                 </div>
@@ -69,14 +82,24 @@ export default function HistorialCategoriaGroup({
                     overflow: "hidden",
                     marginBottom: "var(--space-3)",
                 }}>
-                    {pagos.map((h) => (
-                        <HistorialItem
-                            key={h.id}
-                            pago={h}
-                            compromiso={getCompromiso(h.compromisoId)}
-                            onClick={() => onClickPago(h)}
-                        />
-                    ))}
+                    {entradas.map((entrada, i) =>
+                        entrada.tipo === "grupal" ? (
+                            <HistorialPagoGrupal
+                                key={entrada.compromisoId}
+                                compromisoId={entrada.compromisoId}
+                                compromisoNombre={entrada.compromisoNombre}
+                                compromiso={getCompromiso(entrada.compromisoId)}
+                                pagos={entrada.pagos}
+                            />
+                        ) : (
+                            <HistorialItem
+                                key={entrada.pago.id}
+                                pago={entrada.pago}
+                                compromiso={getCompromiso(entrada.pago.compromisoId)}
+                                onClick={() => onClickPago(entrada.pago)}
+                            />
+                        )
+                    )}
                 </div>
             )}
         </div>

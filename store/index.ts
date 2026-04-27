@@ -1,7 +1,7 @@
 "use client";
 import { create } from "zustand";
 import type { Compromiso, HistorialPago, AppSettings, Space, PerfilFinanciero } from "@/types";
-import { compromisosService, historialService, settingsService, spacesService } from "@/lib/firestore";
+import { compromisosService, historialService, settingsService, spacesService, sharingService } from "@/lib/firestore";
 import { calcProximaFecha } from "@/lib/utils";
 
 interface AppStore {
@@ -158,8 +158,13 @@ export const useStore = create<AppStore>()((set, get) => ({
     deleteCompromiso: async (id) => {
         const { space } = get();
         if (!space) return;
+        const compromiso = get().compromisos.find((c) => c.id === id);
         set((s) => ({ compromisos: s.compromisos.filter((c) => c.id !== id) }));
         compromisosService.delete(space.id, id).catch(console.error);
+        // Si estaba compartido, borrar las copias en los spaces de los destinatarios
+        if (compromiso && (compromiso.compartidoCon?.length ?? 0) > 0) {
+            sharingService.deleteSharedCopies(id, compromiso.compartidoCon!).catch(console.error);
+        }
     },
 
     marcarPagado: async (id, notas?, referencia?, comprobante?) => {
@@ -183,6 +188,15 @@ export const useStore = create<AppStore>()((set, get) => ({
         const tempHistId = uid();
         set((s) => ({ historial: [{ ...pago, id: tempHistId }, ...s.historial] }));
         historialService.add(space.id, pago).catch(console.error);
+
+        // Si es un compromiso compartido (copia), también escribir en el space del dueño
+        // con el compromisoOriginalId para que aparezca en el historial del dueño
+        if (compromiso.esCompartido && compromiso.spaceOwnerId && compromiso.compromisoOriginalId) {
+            historialService.add(compromiso.spaceOwnerId, {
+                ...pago,
+                compromisoId: compromiso.compromisoOriginalId,
+            }).catch(console.error);
+        }
 
         const nuevaFecha = calcProximaFecha(compromiso.proximaFecha, compromiso.frecuencia);
         set((s) => ({

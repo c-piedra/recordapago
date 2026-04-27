@@ -225,4 +225,28 @@ export const sharingService = {
         const compartidoCon = (current.compartidoCon ?? []).filter((id: string) => id !== toUserId);
         await updateDoc(compRef, { compartidoCon });
     },
+
+    // Borrar las copias compartidas del compromiso en los spaces de los destinatarios
+    async deleteSharedCopies(compromisoId: string, compartidoCon: string[]): Promise<void> {
+        for (const userId of compartidoCon) {
+            try {
+                const settingsSnap = await getDoc(doc(db, "users", userId, "settings", "main"));
+                if (!settingsSnap.exists()) continue;
+                const spaceId = settingsSnap.data()?.spaceId as string | undefined;
+                if (!spaceId) continue;
+
+                const copies = await getDocs(
+                    query(
+                        spaceCol(spaceId, "compromisos"),
+                        where("compromisoOriginalId", "==", compromisoId)
+                    )
+                );
+                for (const d of copies.docs) {
+                    await deleteDoc(d.ref);
+                }
+            } catch (err) {
+                console.error("Error borrando copia compartida para usuario", userId, err);
+            }
+        }
+    },
 };
