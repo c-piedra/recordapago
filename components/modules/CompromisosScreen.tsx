@@ -150,7 +150,7 @@ export default function CompromisosScreen() {
             {/* Tabs */}
             <div className="tab-pills">
                 <button className={`tab-pill${tab === "activos" ? " active" : ""}`} onClick={() => setTab("activos")}>
-                    Activos ({activos.length})
+                    Fijos ({activos.length})
                 </button>
                 <button className={`tab-pill${tab === "pausados" ? " active" : ""}`} onClick={() => setTab("pausados")}>
                     Pausados ({pausados.length})
@@ -176,14 +176,31 @@ export default function CompromisosScreen() {
                 />
             ) : (
                 <>
-                    <button className="btn btn-primary" style={{ width: "100%" }} onClick={() => setShowForm(true)}>
-                        <Plus size={16} /> Nuevo compromiso
-                    </button>
+                    {/* Encabezado estilo Variables */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-3)" }}>
+                        <div>
+                            <p style={{ fontWeight: 700, fontSize: "var(--text-base)", color: "var(--color-text)" }}>
+                                {tab === "activos" ? "💳 Gastos Fijos" : "⏸️ Pausados"}
+                            </p>
+                            <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)" }}>
+                                {tab === "activos" ? "Compromisos de monto fijo recurrente" : "Compromisos temporalmente pausados"}
+                            </p>
+                        </div>
+                        {tab === "activos" && (
+                            <button
+                                className="btn btn-secondary"
+                                style={{ minHeight: 36, fontSize: "var(--text-xs)", padding: "0 var(--space-3)", display: "flex", alignItems: "center", gap: 4 }}
+                                onClick={() => setShowForm(true)}
+                            >
+                                <Plus size={14} /> Nuevo
+                            </button>
+                        )}
+                    </div>
 
                     {shown.length === 0 ? (
                         <EmptyState
                             icon={tab === "activos" ? "💳" : "⏸️"}
-                            message={tab === "activos" ? "Sin compromisos activos" : "Sin compromisos pausados"}
+                            message={tab === "activos" ? "Sin gastos fijos aún" : "Sin compromisos pausados"}
                             sub={tab === "activos" ? "Agregá tus pagos recurrentes" : ""}
                         />
                     ) : (
