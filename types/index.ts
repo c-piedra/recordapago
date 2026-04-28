@@ -81,6 +81,7 @@ export interface Compromiso {
     proximaFecha: string;
     diasAntes: number;
     estado: EstadoCompromiso;
+    moneda?: Moneda;              // ₡ CRC por defecto
     notas?: string;
     color?: string;
     icono?: string;
@@ -103,12 +104,14 @@ export interface Compromiso {
 }
 
 export type FrecuenciaSalario = "semanal" | "quincenal" | "mensual";
+export type Moneda = "CRC" | "USD";
 
 export interface PerfilFinanciero {
     salario: number;
     frecuenciaSalario: FrecuenciaSalario;
-    salarioMensual: number; // calculado automáticamente
-    meta?: number; // % máximo a gastar en compromisos
+    monedaSalario: Moneda;        // ₡ o $
+    salarioMensual: number;       // siempre en CRC (calculado con tipo de cambio del momento)
+    meta?: number;                // % máximo a gastar en compromisos
 }
 
 export interface AppSettings {
@@ -118,6 +121,32 @@ export interface AppSettings {
     spaceId?: string;
     perfil?: PerfilFinanciero;
 }
+export type PeriodoGastoVariable = "mensual" | "quincenal" | "semanal";
+
+export interface GastoVariable {
+    id: string;
+    nombre: string;
+    categoria: CategoriaCompromiso;
+    presupuesto: number;
+    moneda?: Moneda;
+    icono?: string;
+    periodo: PeriodoGastoVariable;
+    creadoEn?: any;
+}
+
+export interface GastoVariableEntrada {
+    id: string;
+    gastoVariableId: string;
+    gastoVariableNombre: string;
+    monto: number;
+    moneda?: Moneda;
+    descripcion?: string;
+    fecha: string;           // YYYY-MM-DD
+    pagadoPor?: string;
+    pagadoPorNombre?: string;
+    creadoEn?: any;
+}
+
 export interface InvitacionCompartir {
     id: string;
     compromisoId: string;

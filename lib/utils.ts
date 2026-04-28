@@ -4,6 +4,12 @@ import type { CategoriaCompromiso, FrecuenciaCompromiso } from "@/types";
 export const fmt = (n: number) =>
     new Intl.NumberFormat("es-CR", { style: "currency", currency: "CRC", maximumFractionDigits: 0 }).format(n);
 
+export const fmtUSD = (n: number) =>
+    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 }).format(n);
+
+export const fmtMoneda = (n: number, moneda?: "CRC" | "USD") =>
+    moneda === "USD" ? fmtUSD(n) : fmt(n);
+
 // ─── Formato fecha ────────────────────────────────────────────────────────────
 export const fmtDate = (iso: string) =>
     new Date(iso + "T00:00:00").toLocaleDateString("es-CR", {

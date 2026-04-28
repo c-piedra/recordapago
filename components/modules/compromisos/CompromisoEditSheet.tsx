@@ -1,10 +1,12 @@
 import { Sheet, Select } from "@/components/ui";
+import EmojiPicker from "./EmojiPicker";
 import { CATEGORIA_OPTIONS, FRECUENCIA_OPTIONS, DIAS_OPTIONS } from "./constants";
 
 export interface EditFormData {
     nombre: string;
     categoria: string;
     monto: string;
+    moneda: "CRC" | "USD";
     frecuencia: string;
     proximaFecha: string;
     diasAntes: string;
@@ -39,13 +41,35 @@ export default function CompromisoEditSheet({ form, onFormChange, onGuardar, onC
             />
 
             <div className="input-group">
-                <label className="input-label">Monto (₡) *</label>
-                <input
-                    className="input"
-                    type="number"
-                    value={form.monto}
-                    onChange={(e) => onFormChange({ monto: e.target.value })}
-                />
+                <label className="input-label">Monto *</label>
+                <div style={{ display: "flex", gap: "var(--space-2)", marginBottom: "var(--space-2)" }}>
+                    {(["CRC", "USD"] as const).map((m) => (
+                        <button
+                            key={m}
+                            type="button"
+                            className={`btn ${form.moneda === m ? "btn-primary" : "btn-secondary"}`}
+                            style={{ flex: 1, fontSize: "var(--text-xs)", minHeight: 36 }}
+                            onClick={() => onFormChange({ moneda: m })}
+                        >
+                            {m === "CRC" ? "₡ Colones" : "$ Dólares"}
+                        </button>
+                    ))}
+                </div>
+                <div style={{ position: "relative" }}>
+                    <span style={{
+                        position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)",
+                        fontSize: "var(--text-sm)", color: "var(--color-text-3)", fontWeight: 600,
+                    }}>
+                        {form.moneda === "USD" ? "$" : "₡"}
+                    </span>
+                    <input
+                        className="input"
+                        type="number"
+                        value={form.monto}
+                        style={{ paddingLeft: 28 }}
+                        onChange={(e) => onFormChange({ monto: e.target.value })}
+                    />
+                </div>
             </div>
 
             <Select
@@ -72,15 +96,10 @@ export default function CompromisoEditSheet({ form, onFormChange, onGuardar, onC
                 options={DIAS_OPTIONS}
             />
 
-            <div className="input-group">
-                <label className="input-label">Emoji personalizado</label>
-                <input
-                    className="input"
-                    value={form.icono}
-                    onChange={(e) => onFormChange({ icono: e.target.value })}
-                    placeholder="Ej: 🎵 💡 🏠"
-                />
-            </div>
+            <EmojiPicker
+                value={form.icono}
+                onChange={(emoji) => onFormChange({ icono: emoji })}
+            />
 
             <div className="input-group">
                 <label className="input-label">Notas</label>

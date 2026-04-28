@@ -10,15 +10,16 @@ import CompromisoFormSheet, { type FormData } from "./compromisos/CompromisoForm
 import CompromisoEditSheet, { type EditFormData } from "./compromisos/CompromisoEditSheet";
 import PagoSheet, { type PagoFormData } from "./compromisos/PagoSheet";
 import CompartirSheet from "./compromisos/CompartirSheet";
+import GastosVariablesSection from "./finanzas/GastosVariablesSection";
 
 const FORM_INICIAL: FormData = {
-    nombre: "", categoria: "suscripcion", monto: "",
+    nombre: "", categoria: "suscripcion", monto: "", moneda: "CRC",
     frecuencia: "mensual", proximaFecha: "",
     diasAntes: "", notas: "", icono: "", categoriaPersonalizada: "",
 };
 
 const EDIT_FORM_INICIAL: EditFormData = {
-    nombre: "", categoria: "suscripcion", monto: "",
+    nombre: "", categoria: "suscripcion", monto: "", moneda: "CRC",
     frecuencia: "mensual", proximaFecha: "",
     diasAntes: "", notas: "", icono: "",
 };
@@ -27,11 +28,15 @@ export default function CompromisosScreen() {
     const {
         compromisos, addCompromiso, updateCompromiso, deleteCompromiso,
         marcarPagado, categoriaAbierta, setCategoriaAbierta,
+        gastosVariables, gastosVariableEntradas,
+        addGastoVariable, updateGastoVariable, deleteGastoVariable,
+        addGastoVariableEntrada, deleteGastoVariableEntrada,
+        tipoCambio,
         space, userId, userName,
     } = useStore();
 
     const [errors, setErrors] = useState<Record<string, boolean>>({});
-    const [tab, setTab] = useState<"activos" | "pausados">("activos");
+    const [tab, setTab] = useState<"activos" | "pausados" | "variables">("activos");
     const [showForm, setShowForm] = useState(false);
     const [form, setForm] = useState<FormData>(FORM_INICIAL);
     const [selected, setSelected] = useState<Compromiso | null>(null);
@@ -45,7 +50,7 @@ export default function CompromisosScreen() {
 
     const activos = compromisos.filter((c) => c.estado === "activo");
     const pausados = compromisos.filter((c) => c.estado === "pausado");
-    const shown = tab === "activos" ? activos : pausados;
+    const shown = tab === "activos" ? activos : tab === "pausados" ? pausados : [];
 
     useEffect(() => {
         if (categoriaAbierta) {
@@ -78,6 +83,7 @@ export default function CompromisosScreen() {
             nombre: form.nombre,
             categoria: form.categoria as any,
             monto: parseFloat(form.monto),
+            moneda: form.moneda,
             frecuencia: form.frecuencia as any,
             proximaFecha: form.proximaFecha,
             diasAntes: form.diasAntes ? parseInt(form.diasAntes) : 0,
@@ -95,6 +101,7 @@ export default function CompromisosScreen() {
             nombre: c.nombre,
             categoria: c.categoria,
             monto: String(c.monto),
+            moneda: c.moneda ?? "CRC",
             frecuencia: c.frecuencia,
             proximaFecha: c.proximaFecha,
             diasAntes: String(c.diasAntes),
@@ -110,6 +117,7 @@ export default function CompromisosScreen() {
             nombre: editForm.nombre,
             categoria: editForm.categoria as any,
             monto: parseFloat(editForm.monto),
+            moneda: editForm.moneda,
             frecuencia: editForm.frecuencia as any,
             proximaFecha: editForm.proximaFecha,
             diasAntes: editForm.diasAntes ? parseInt(editForm.diasAntes) : 0,
@@ -147,29 +155,50 @@ export default function CompromisosScreen() {
                 <button className={`tab-pill${tab === "pausados" ? " active" : ""}`} onClick={() => setTab("pausados")}>
                     Pausados ({pausados.length})
                 </button>
+                <button className={`tab-pill${tab === "variables" ? " active" : ""}`} onClick={() => setTab("variables")}>
+                    Variables ({gastosVariables.length})
+                </button>
             </div>
 
-            <button className="btn btn-primary" style={{ width: "100%" }} onClick={() => setShowForm(true)}>
-                <Plus size={16} /> Nuevo compromiso
-            </button>
-
-            {shown.length === 0 ? (
-                <EmptyState
-                    icon={tab === "activos" ? "💳" : "⏸️"}
-                    message={tab === "activos" ? "Sin compromisos activos" : "Sin compromisos pausados"}
-                    sub={tab === "activos" ? "Agregá tus pagos recurrentes" : ""}
+            {/* Tab: Variables */}
+            {tab === "variables" ? (
+                <GastosVariablesSection
+                    gastosVariables={gastosVariables}
+                    gastosVariableEntradas={gastosVariableEntradas}
+                    tipoCambio={tipoCambio}
+                    userId={userId}
+                    userName={userName}
+                    onAdd={addGastoVariable}
+                    onUpdate={updateGastoVariable}
+                    onDelete={deleteGastoVariable}
+                    onAddEntrada={addGastoVariableEntrada}
+                    onDeleteEntrada={deleteGastoVariableEntrada}
                 />
             ) : (
-                Object.entries(porCategoria).map(([cat, items]) => (
-                    <CategoriaGroup
-                        key={cat}
-                        categoria={cat}
-                        items={items}
-                        colapsado={categoriasColapsadas[cat] ?? true}
-                        onToggle={() => toggleCategoria(cat)}
-                        onClickItem={setSelected}
-                    />
-                ))
+                <>
+                    <button className="btn btn-primary" style={{ width: "100%" }} onClick={() => setShowForm(true)}>
+                        <Plus size={16} /> Nuevo compromiso
+                    </button>
+
+                    {shown.length === 0 ? (
+                        <EmptyState
+                            icon={tab === "activos" ? "💳" : "⏸️"}
+                            message={tab === "activos" ? "Sin compromisos activos" : "Sin compromisos pausados"}
+                            sub={tab === "activos" ? "Agregá tus pagos recurrentes" : ""}
+                        />
+                    ) : (
+                        Object.entries(porCategoria).map(([cat, items]) => (
+                            <CategoriaGroup
+                                key={cat}
+                                categoria={cat}
+                                items={items}
+                                colapsado={categoriasColapsadas[cat] ?? true}
+                                onToggle={() => toggleCategoria(cat)}
+                                onClickItem={setSelected}
+                            />
+                        ))
+                    )}
+                </>
             )}
 
             {/* Detail Sheet */}

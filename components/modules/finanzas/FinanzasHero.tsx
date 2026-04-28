@@ -1,14 +1,22 @@
-import { fmt } from "@/lib/utils";
+import { fmt, fmtUSD } from "@/lib/utils";
+import type { Moneda } from "@/types";
 
 interface FinanzasHeroProps {
-    salarioMensual: number;
+    salarioMensual: number;        // siempre en CRC
+    salarioOriginal: number;       // en la moneda original
+    monedaSalario: Moneda;
+    tipoCambio: number;
     totalCompromisos: number;
     disponible: number;
     porcentajeGastado: number;
+    capacidadAhorro: number;
     onEditar: () => void;
 }
 
-export default function FinanzasHero({ salarioMensual, totalCompromisos, disponible, porcentajeGastado, onEditar }: FinanzasHeroProps) {
+export default function FinanzasHero({
+    salarioMensual, salarioOriginal, monedaSalario, tipoCambio,
+    totalCompromisos, disponible, porcentajeGastado, capacidadAhorro, onEditar,
+}: FinanzasHeroProps) {
     const porcentaje = Math.min(100, porcentajeGastado);
     const barColor = porcentaje > 70 ? "var(--color-danger)" : porcentaje > 50 ? "var(--color-warning)" : "var(--color-success)";
 
@@ -30,9 +38,20 @@ export default function FinanzasHero({ salarioMensual, totalCompromisos, disponi
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "var(--space-4)" }}>
                 <div>
                     <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)", marginBottom: 4 }}>Salario mensual</p>
-                    <p style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "var(--text-3xl)", color: "var(--color-text)" }}>
-                        {fmt(salarioMensual)}
-                    </p>
+                    {monedaSalario === "USD" ? (
+                        <>
+                            <p style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "var(--text-3xl)", color: "var(--color-text)" }}>
+                                {fmtUSD(salarioOriginal)}
+                            </p>
+                            <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)", marginTop: 2 }}>
+                                ≈ {fmt(salarioMensual)} · ₡{tipoCambio.toFixed(0)} × $
+                            </p>
+                        </>
+                    ) : (
+                        <p style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "var(--text-3xl)", color: "var(--color-text)" }}>
+                            {fmt(salarioMensual)}
+                        </p>
+                    )}
                 </div>
                 <button
                     className="btn btn-ghost"
@@ -54,7 +73,7 @@ export default function FinanzasHero({ salarioMensual, totalCompromisos, disponi
                 }} />
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-3)" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "var(--space-2)" }}>
                 <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: "var(--radius-md)", padding: "var(--space-3)", textAlign: "center" }}>
                     <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)", marginBottom: 4 }}>Comprometido</p>
                     <p style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "var(--text-lg)", color: barColor }}>
@@ -65,6 +84,15 @@ export default function FinanzasHero({ salarioMensual, totalCompromisos, disponi
                     <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)", marginBottom: 4 }}>Disponible</p>
                     <p style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "var(--text-lg)", color: disponible >= 0 ? "var(--color-success)" : "var(--color-danger)" }}>
                         {fmt(Math.abs(disponible))}
+                    </p>
+                </div>
+                <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: "var(--radius-md)", padding: "var(--space-3)", textAlign: "center" }}>
+                    <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)", marginBottom: 4 }}>Cap. ahorro</p>
+                    <p style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "var(--text-lg)", color: capacidadAhorro >= 10 ? "var(--color-success)" : capacidadAhorro > 0 ? "var(--color-warning)" : "var(--color-danger)" }}>
+                        {capacidadAhorro}%
+                    </p>
+                    <p style={{ fontSize: 9, color: "var(--color-text-3)", marginTop: 1 }}>
+                        {capacidadAhorro >= 10 ? "✓ saludable" : "meta: 10%"}
                     </p>
                 </div>
             </div>

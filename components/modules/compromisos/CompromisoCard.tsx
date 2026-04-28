@@ -1,4 +1,4 @@
-import { fmt, fmtDate, diasHasta, diasHastaNum, getUrgenciaColor, CATEGORIA_ICONO, FRECUENCIA_LABEL } from "@/lib/utils";
+import { fmtMoneda, fmtDate, diasHasta, diasHastaNum, getUrgenciaColor, CATEGORIA_ICONO, FRECUENCIA_LABEL } from "@/lib/utils";
 import { UrgenciaBadge } from "@/components/ui";
 import type { Compromiso } from "@/types";
 
@@ -66,7 +66,7 @@ export default function CompromisoCard({ compromiso: c, index, totalItems, onCli
                 </div>
                 <div style={{ textAlign: "right" }}>
                     <p style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "var(--text-base)", color: "var(--color-text)" }}>
-                        {fmt(c.monto)}
+                        {fmtMoneda(c.monto, c.moneda)}
                     </p>
                     <UrgenciaBadge dias={dias} />
                 </div>

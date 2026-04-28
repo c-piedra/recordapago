@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useStore } from "@/store";
 import { fmt, CATEGORIA_LABEL } from "@/lib/utils";
-import type { FrecuenciaSalario } from "@/types";
+import type { FrecuenciaSalario, Moneda } from "@/types";
 import PerfilFinancieroForm from "./finanzas/PerfilFinancieroForm";
 import FinanzasHero from "./finanzas/FinanzasHero";
 import AlertasFinancieras from "./finanzas/AlertasFinancieras";
@@ -10,27 +10,24 @@ import GraficasSection from "./finanzas/GraficasSection";
 import GastosPorCategoria from "./finanzas/GastosPorCategoria";
 import ConsejoIA from "./finanzas/ConsejoIA";
 
-const calcSalarioMensual = (salario: number, frecuencia: FrecuenciaSalario): number => {
-    switch (frecuencia) {
-        case "quincenal": return salario * 2;
-        case "semanal": return salario * 4.33;
-        default: return salario;
-    }
-};
-
 type ChartTab = "distribucion" | "resumen" | "evolucion";
 
 export default function FinanzasScreen() {
-    const { settings, updatePerfil, compromisos, historial, getFinanzasStats } = useStore();
+    const { settings, updatePerfil, compromisos, historial, getFinanzasStats, tipoCambio, fetchTipoCambio } = useStore();
     const perfil = settings.perfil;
     const stats = getFinanzasStats();
 
     const [showPerfilForm, setShowPerfilForm] = useState(false);
     const [salarioInput, setSalarioInput] = useState("");
     const [frecuencia, setFrecuencia] = useState<FrecuenciaSalario>("mensual");
+    const [monedaSalario, setMonedaSalario] = useState<Moneda>("CRC");
     const [loadingIA, setLoadingIA] = useState(false);
     const [consejoIA, setConsejoIA] = useState<string | null>(null);
     const [chartTab, setChartTab] = useState<ChartTab>("distribucion");
+
+    useEffect(() => {
+        fetchTipoCambio();
+    }, []);
 
     useEffect(() => {
         if (!perfil) {
@@ -38,14 +35,17 @@ export default function FinanzasScreen() {
         } else {
             setSalarioInput(String(perfil.salario));
             setFrecuencia(perfil.frecuenciaSalario);
+            setMonedaSalario(perfil.monedaSalario ?? "CRC");
         }
     }, [perfil]);
 
     const handleGuardarPerfil = () => {
         if (!salarioInput) return;
         const salario = parseFloat(salarioInput);
-        const salarioMensual = calcSalarioMensual(salario, frecuencia);
-        updatePerfil({ salario, frecuenciaSalario: frecuencia, salarioMensual });
+        // salarioMensual siempre en CRC con el tipo de cambio actual
+        const base = monedaSalario === "USD" ? salario * tipoCambio : salario;
+        const salarioMensual = frecuencia === "quincenal" ? base * 2 : frecuencia === "semanal" ? base * 4.33 : base;
+        updatePerfil({ salario, frecuenciaSalario: frecuencia, monedaSalario, salarioMensual });
         setShowPerfilForm(false);
     };
 
@@ -106,9 +106,12 @@ export default function FinanzasScreen() {
             <PerfilFinancieroForm
                 salarioInput={salarioInput}
                 frecuencia={frecuencia}
+                monedaSalario={monedaSalario}
+                tipoCambio={tipoCambio}
                 tienePerfil={!!perfil}
                 onSalarioChange={setSalarioInput}
                 onFrecuenciaChange={setFrecuencia}
+                onMonedaChange={setMonedaSalario}
                 onGuardar={handleGuardarPerfil}
                 onCancelar={() => setShowPerfilForm(false)}
             />
@@ -119,12 +122,17 @@ export default function FinanzasScreen() {
         <div className="page fade-in">
             <FinanzasHero
                 salarioMensual={stats.salarioMensual}
+                salarioOriginal={perfil?.salario ?? 0}
+                monedaSalario={perfil?.monedaSalario ?? "CRC"}
+                tipoCambio={tipoCambio}
                 totalCompromisos={stats.totalCompromisos}
                 disponible={stats.disponible}
                 porcentajeGastado={stats.porcentajeGastado}
+                capacidadAhorro={stats.capacidadAhorro}
                 onEditar={() => {
                     setSalarioInput(String(perfil?.salario ?? ""));
                     setFrecuencia(perfil?.frecuenciaSalario ?? "mensual");
+                    setMonedaSalario(perfil?.monedaSalario ?? "CRC");
                     setShowPerfilForm(true);
                 }}
             />

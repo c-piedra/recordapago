@@ -1,25 +1,38 @@
 "use client";
 import { create } from "zustand";
-import type { Compromiso, HistorialPago, AppSettings, Space, PerfilFinanciero } from "@/types";
-import { compromisosService, historialService, settingsService, spacesService } from "@/lib/firestore";
+import type { Compromiso, HistorialPago, AppSettings, Space, PerfilFinanciero, Moneda, GastoVariable, GastoVariableEntrada, PeriodoGastoVariable } from "@/types";
+import { compromisosService, historialService, settingsService, spacesService, gastosVariablesService, gastosVariableEntradasService } from "@/lib/firestore";
 import { calcProximaFecha } from "@/lib/utils";
 
 interface AppStore {
     compromisos: Compromiso[];
     historial: HistorialPago[];
+    gastosVariables: GastoVariable[];
+    gastosVariableEntradas: GastoVariableEntrada[];
     settings: AppSettings;
     space: Space | null;
     activeTab: string;
     userId: string | null;
     userName: string | null;
     categoriaAbierta: string | null;
+    tipoCambio: number;
+    tipoCambioActualizado: string | null;
+    fetchTipoCambio: () => Promise<void>;
+    addGastoVariable: (g: Omit<GastoVariable, "id">) => Promise<void>;
+    updateGastoVariable: (id: string, data: Partial<GastoVariable>) => Promise<void>;
+    deleteGastoVariable: (id: string) => Promise<void>;
+    addGastoVariableEntrada: (e: Omit<GastoVariableEntrada, "id">) => Promise<void>;
+    deleteGastoVariableEntrada: (id: string) => Promise<void>;
 
     updatePerfil: (perfil: PerfilFinanciero) => void;
     getFinanzasStats: () => {
         salarioMensual: number;
         totalCompromisos: number;
+        totalVariablePresupuestado: number;
+        totalVariableGastado: number;
         porcentajeGastado: number;
         disponible: number;
+        capacidadAhorro: number;
         porCategoria: Record<string, number>;
         alertas: string[];
     };
@@ -48,26 +61,42 @@ interface AppStore {
 }
 
 const uid = () => Math.random().toString(36).slice(2, 10);
-const calcMensual = (monto: number, frecuencia: string): number => {
+
+// Convierte monto a CRC según moneda y tipo de cambio, luego normaliza a mensual
+const calcMensualCRC = (monto: number, frecuencia: string, moneda: Moneda = "CRC", tipoCambio: number = 515): number => {
+    const montoCRC = moneda === "USD" ? monto * tipoCambio : monto;
     switch (frecuencia) {
-        case "semanal": return monto * 4.33;
-        case "quincenal": return monto * 2;
-        case "mensual": return monto;
-        case "bimestral": return monto / 2;
-        case "trimestral": return monto / 3;
-        case "semestral": return monto / 6;
-        case "anual": return monto / 12;
-        default: return monto;
+        case "semanal": return montoCRC * 4.33;
+        case "quincenal": return montoCRC * 2;
+        case "mensual": return montoCRC;
+        case "bimestral": return montoCRC / 2;
+        case "trimestral": return montoCRC / 3;
+        case "semestral": return montoCRC / 6;
+        case "anual": return montoCRC / 12;
+        default: return montoCRC;
+    }
+};
+
+const calcSalarioMensualCRC = (salario: number, frecuencia: string, moneda: Moneda = "CRC", tipoCambio: number = 515): number => {
+    const base = moneda === "USD" ? salario * tipoCambio : salario;
+    switch (frecuencia) {
+        case "quincenal": return base * 2;
+        case "semanal": return base * 4.33;
+        default: return base;
     }
 };
 export const useStore = create<AppStore>()((set, get) => ({
     compromisos: [],
     historial: [],
+    gastosVariables: [],
+    gastosVariableEntradas: [],
     space: null,
     activeTab: "dashboard",
     userId: null,
     userName: null,
     categoriaAbierta: null,
+    tipoCambio: 515,
+    tipoCambioActualizado: null,
     settings: {
         notificacionesPush: false,
         diasAntesPorDefecto: 3,
@@ -78,6 +107,22 @@ export const useStore = create<AppStore>()((set, get) => ({
     setUserName: (name) => set({ userName: name }),
     setActiveTab: (tab) => set({ activeTab: tab }),
     setCategoriaAbierta: (cat) => set({ categoriaAbierta: cat }),
+
+    fetchTipoCambio: async () => {
+        const { tipoCambioActualizado } = get();
+        // Solo actualiza si no hay dato o tiene más de 1 hora
+        if (tipoCambioActualizado) {
+            const diff = Date.now() - new Date(tipoCambioActualizado).getTime();
+            if (diff < 60 * 60 * 1000) return;
+        }
+        try {
+            const res = await fetch("/api/tipo-cambio");
+            const data = await res.json();
+            if (data.crc) set({ tipoCambio: data.crc, tipoCambioActualizado: new Date().toISOString() });
+        } catch {
+            // Mantener el valor actual si falla
+        }
+    },
 
     loadSettings: async (userId) => {
         const saved = await settingsService.get(userId);
@@ -102,7 +147,9 @@ export const useStore = create<AppStore>()((set, get) => ({
         const unsubCompromisos = compromisosService.subscribe(space.id, (compromisos) => set({ compromisos }));
         const unsubHistorial = historialService.subscribe(space.id, (historial) => set({ historial }));
         const unsubSpace = spacesService.subscribe(space.id, (space) => set({ space }));
-        return () => { unsubCompromisos(); unsubHistorial(); unsubSpace(); };
+        const unsubGastosVariables = gastosVariablesService.subscribe(space.id, (gastosVariables) => set({ gastosVariables }));
+        const unsubGastosEntradas = gastosVariableEntradasService.subscribe(space.id, (gastosVariableEntradas) => set({ gastosVariableEntradas }));
+        return () => { unsubCompromisos(); unsubHistorial(); unsubSpace(); unsubGastosVariables(); unsubGastosEntradas(); };
     },
 
     createSpace: async (userId, userName) => {
@@ -246,6 +293,46 @@ export const useStore = create<AppStore>()((set, get) => ({
         }
     },
 
+    addGastoVariable: async (g) => {
+        const { space } = get();
+        if (!space) return;
+        const tempId = uid();
+        set((s) => ({ gastosVariables: [...s.gastosVariables, { ...g, id: tempId }] }));
+        gastosVariablesService.add(space.id, g).catch(console.error);
+    },
+
+    updateGastoVariable: async (id, data) => {
+        const { space } = get();
+        if (!space) return;
+        set((s) => ({ gastosVariables: s.gastosVariables.map((g) => g.id === id ? { ...g, ...data } : g) }));
+        gastosVariablesService.update(space.id, id, data).catch(console.error);
+    },
+
+    deleteGastoVariable: async (id) => {
+        const { space } = get();
+        if (!space) return;
+        set((s) => ({
+            gastosVariables: s.gastosVariables.filter((g) => g.id !== id),
+            gastosVariableEntradas: s.gastosVariableEntradas.filter((e) => e.gastoVariableId !== id),
+        }));
+        gastosVariablesService.delete(space.id, id).catch(console.error);
+    },
+
+    addGastoVariableEntrada: async (e) => {
+        const { space } = get();
+        if (!space) return;
+        const tempId = uid();
+        set((s) => ({ gastosVariableEntradas: [{ ...e, id: tempId }, ...s.gastosVariableEntradas] }));
+        gastosVariableEntradasService.add(space.id, e).catch(console.error);
+    },
+
+    deleteGastoVariableEntrada: async (id) => {
+        const { space } = get();
+        if (!space) return;
+        set((s) => ({ gastosVariableEntradas: s.gastosVariableEntradas.filter((e) => e.id !== id) }));
+        gastosVariableEntradasService.delete(space.id, id).catch(console.error);
+    },
+
     deleteHistorial: async (id) => {
         const { space } = get();
         if (!space) return;
@@ -262,13 +349,13 @@ export const useStore = create<AppStore>()((set, get) => ({
     },
 
     getDashboardStats: () => {
-        const { compromisos, historial } = get();
+        const { compromisos, historial, tipoCambio } = get();
         const hoy = new Date();
         const startOfMonth = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split("T")[0];
         const endOfMonth = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).toISOString().split("T")[0];
         const activos = compromisos.filter((c) => c.estado === "activo");
         return {
-            totalMensual: activos.reduce((s, c) => s + calcMensual(c.monto, c.frecuencia), 0),
+            totalMensual: activos.reduce((s, c) => s + calcMensualCRC(c.monto, c.frecuencia, c.moneda, tipoCambio), 0),
             proximosVencer: activos.filter((c) => {
                 const dias = Math.round((new Date(c.proximaFecha + "T00:00:00").getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
                 return dias >= 0 && dias <= 5;
@@ -287,25 +374,50 @@ export const useStore = create<AppStore>()((set, get) => ({
     },
 
     getFinanzasStats: () => {
-        const { compromisos, settings } = get();
+        const { compromisos, settings, tipoCambio, gastosVariables, gastosVariableEntradas } = get();
         const activos = compromisos.filter((c) => c.estado === "activo");
-        const salarioMensual = settings.perfil?.salarioMensual ?? 0;
-        const totalCompromisos = activos.reduce((s, c) => s + calcMensual(c.monto, c.frecuencia), 0);
-        const porcentajeGastado = salarioMensual > 0
-            ? Math.round((totalCompromisos / salarioMensual) * 100)
+        const perfil = settings.perfil;
+        const salarioMensual = perfil
+            ? calcSalarioMensualCRC(perfil.salario, perfil.frecuenciaSalario, perfil.monedaSalario ?? "CRC", tipoCambio)
             : 0;
-        const disponible = salarioMensual - totalCompromisos;
+        const totalCompromisos = activos.reduce((s, c) => s + calcMensualCRC(c.monto, c.frecuencia, c.moneda, tipoCambio), 0);
+
+        // Presupuesto variable total normalizado a mensual
+        const totalVariablePresupuestado = gastosVariables.reduce((s, g) => {
+            const montoCRC = (g.moneda === "USD" ? g.presupuesto * tipoCambio : g.presupuesto);
+            const mensual = g.periodo === "semanal" ? montoCRC * 4.33 : g.periodo === "quincenal" ? montoCRC * 2 : montoCRC;
+            return s + mensual;
+        }, 0);
+
+        // Gasto variable real del período actual
+        const hoy = new Date();
+        const mesActual = hoy.toISOString().slice(0, 7);
+        const totalVariableGastado = gastosVariableEntradas
+            .filter((e) => e.fecha.startsWith(mesActual))
+            .reduce((s, e) => s + (e.moneda === "USD" ? e.monto * tipoCambio : e.monto), 0);
+
+        const totalTotal = totalCompromisos + totalVariablePresupuestado;
+        const porcentajeGastado = salarioMensual > 0
+            ? Math.round((totalTotal / salarioMensual) * 100)
+            : 0;
+        const disponible = salarioMensual - totalTotal;
 
         const porCategoria = activos.reduce<Record<string, number>>((acc, c) => {
-            acc[c.categoria] = (acc[c.categoria] ?? 0) + c.monto;
+            const montoCRC = calcMensualCRC(c.monto, c.frecuencia, c.moneda, tipoCambio);
+            acc[c.categoria] = (acc[c.categoria] ?? 0) + montoCRC;
             return acc;
         }, {});
+
+        const capacidadAhorro = salarioMensual > 0
+            ? Math.round((disponible / salarioMensual) * 100)
+            : 0;
 
         const alertas: string[] = [];
         if (porcentajeGastado > 70) alertas.push(`Tus compromisos consumen el ${porcentajeGastado}% de tu salario. Revisá si podés reducir gastos.`);
         if (porCategoria["suscripcion"] > salarioMensual * 0.1) alertas.push("Tus suscripciones superan el 10% de tu salario.");
-        if (disponible < 0) alertas.push("Tus compromisos superan tu salario mensual. Estás en números rojos.");
+        if (disponible < 0) alertas.push("Tus compromisos y gastos variables superan tu salario. Estás en números rojos.");
+        if (capacidadAhorro > 0 && capacidadAhorro < 10) alertas.push(`Tu capacidad de ahorro es del ${capacidadAhorro}%. Se recomienda al menos el 10% del salario.`);
 
-        return { salarioMensual, totalCompromisos, porcentajeGastado, disponible, porCategoria, alertas };
+        return { salarioMensual, totalCompromisos, totalVariablePresupuestado, totalVariableGastado, porcentajeGastado, disponible, porCategoria, alertas, capacidadAhorro };
     },
 }));

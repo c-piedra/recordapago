@@ -3,7 +3,7 @@ import {
     getDocs, onSnapshot, query, orderBy, serverTimestamp, where,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import type { Compromiso, HistorialPago, AppSettings, Space } from "@/types";
+import type { Compromiso, HistorialPago, AppSettings, Space, GastoVariable, GastoVariableEntrada } from "@/types";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const cleanData = (data: object) =>
@@ -134,6 +134,42 @@ export const settingsService = {
         } catch (err) {
             console.error("Error guardando settings:", err);
         }
+    },
+};
+
+// ─── Gastos variables ─────────────────────────────────────────────────────────
+export const gastosVariablesService = {
+    async add(spaceId: string, g: Omit<GastoVariable, "id">): Promise<string> {
+        const ref = await addDoc(spaceCol(spaceId, "gastosVariables"), cleanData({ ...g, creadoEn: serverTimestamp() }));
+        return ref.id;
+    },
+    async update(spaceId: string, id: string, data: Partial<GastoVariable>): Promise<void> {
+        await updateDoc(spaceDoc(spaceId, "gastosVariables", id), cleanData(data));
+    },
+    async delete(spaceId: string, id: string): Promise<void> {
+        await deleteDoc(spaceDoc(spaceId, "gastosVariables", id));
+    },
+    subscribe(spaceId: string, callback: (items: GastoVariable[]) => void) {
+        return onSnapshot(
+            query(spaceCol(spaceId, "gastosVariables"), orderBy("creadoEn", "asc")),
+            (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as GastoVariable)))
+        );
+    },
+};
+
+export const gastosVariableEntradasService = {
+    async add(spaceId: string, e: Omit<GastoVariableEntrada, "id">): Promise<string> {
+        const ref = await addDoc(spaceCol(spaceId, "gastosVariableEntradas"), cleanData({ ...e, creadoEn: serverTimestamp() }));
+        return ref.id;
+    },
+    async delete(spaceId: string, id: string): Promise<void> {
+        await deleteDoc(spaceDoc(spaceId, "gastosVariableEntradas", id));
+    },
+    subscribe(spaceId: string, callback: (items: GastoVariableEntrada[]) => void) {
+        return onSnapshot(
+            query(spaceCol(spaceId, "gastosVariableEntradas"), orderBy("fecha", "desc")),
+            (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as GastoVariableEntrada)))
+        );
     },
 };
 
