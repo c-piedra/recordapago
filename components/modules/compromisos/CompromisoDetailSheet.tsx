@@ -70,13 +70,20 @@ export default function CompromisoDetailSheet({
                         🤝 Compartir con alguien
                     </button>
                 )}
-                <button
-                    className="btn btn-ghost"
-                    style={{ width: "100%", color: "var(--color-danger)" }}
-                    onClick={onEliminar}
-                >
-                    <Trash2 size={14} /> Eliminar
-                </button>
+                {!c.esCompartido && (
+                    <button
+                        className="btn btn-ghost"
+                        style={{ width: "100%", color: "var(--color-danger)" }}
+                        onClick={onEliminar}
+                    >
+                        <Trash2 size={14} /> Eliminar
+                    </button>
+                )}
+                {c.esCompartido && (
+                    <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)", textAlign: "center", padding: "var(--space-2)" }}>
+                        🔒 Solo el dueño puede eliminar este compromiso
+                    </p>
+                )}
             </div>
         </Sheet>
     );

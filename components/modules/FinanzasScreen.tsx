@@ -45,8 +45,14 @@ export default function FinanzasScreen() {
         // salarioMensual siempre en CRC con el tipo de cambio actual
         const base = monedaSalario === "USD" ? salario * tipoCambio : salario;
         const salarioMensual = frecuencia === "quincenal" ? base * 2 : frecuencia === "semanal" ? base * 4.33 : base;
-        updatePerfil({ salario, frecuenciaSalario: frecuencia, monedaSalario, salarioMensual });
+        // Preservar metaAhorro si ya existía
+        updatePerfil({ salario, frecuenciaSalario: frecuencia, monedaSalario, salarioMensual, metaAhorro: perfil?.metaAhorro });
         setShowPerfilForm(false);
+    };
+
+    const handleSetMetaAhorro = (pct: number | null) => {
+        if (!perfil) return;
+        updatePerfil({ ...perfil, metaAhorro: pct ?? undefined });
     };
 
     const handlePedirConsejo = async () => {
@@ -150,6 +156,9 @@ export default function FinanzasScreen() {
             <GastosPorCategoria
                 porCategoria={stats.porCategoria}
                 salarioMensual={stats.salarioMensual}
+                disponible={stats.disponible}
+                metaAhorro={perfil?.metaAhorro ?? null}
+                onSetMetaAhorro={handleSetMetaAhorro}
             />
 
             <ConsejoIA

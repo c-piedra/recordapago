@@ -112,6 +112,7 @@ export interface PerfilFinanciero {
     monedaSalario: Moneda;        // ₡ o $
     salarioMensual: number;       // siempre en CRC (calculado con tipo de cambio del momento)
     meta?: number;                // % máximo a gastar en compromisos
+    metaAhorro?: number;          // % del salario que el usuario quiere ahorrar
 }
 
 export interface AppSettings {
@@ -151,6 +152,11 @@ export interface InvitacionCompartir {
     id: string;
     compromisoId: string;
     compromisoNombre: string;
+    compromisoMonto: number;
+    compromisoCategoria: string;
+    compromisoFrecuencia: string;
+    compromisoIcono?: string;
+    fromSpaceId: string;
     fromUserId: string;
     fromUserName: string;
     toUserId: string;

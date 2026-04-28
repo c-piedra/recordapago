@@ -11,6 +11,7 @@ import HistorialScreen from "@/components/modules/HistorialScreen";
 import AjustesScreen from "@/components/modules/AjustesScreen";
 import FinanzasScreen from "@/components/modules/FinanzasScreen";
 import LoginScreen from "@/components/modules/LoginScreen";
+import InvitacionesBanner from "@/components/modules/InvitacionesBanner";
 const SCREENS: Record<string, React.ComponentType> = {
   dashboard: DashboardScreen,
   compromisos: CompromisosScreen,
@@ -91,6 +92,7 @@ export default function AppPage() {
   return (
     <div className="app-shell" style={{ position: "relative" }}>
       <AppHeader />
+      <InvitacionesBanner />
       <main className="app-content" key={activeTab}>
         <Screen />
       </main>

@@ -3,7 +3,7 @@ import {
     getDocs, onSnapshot, query, orderBy, serverTimestamp, where,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import type { Compromiso, HistorialPago, AppSettings, Space, GastoVariable, GastoVariableEntrada } from "@/types";
+import type { Compromiso, HistorialPago, AppSettings, Space, GastoVariable, GastoVariableEntrada, InvitacionCompartir } from "@/types";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const cleanData = (data: object) =>
@@ -195,9 +195,37 @@ export const pushService = {
     },
 
 };
+// ─── Invitaciones de compartir ────────────────────────────────────────────────
+export const invitacionesService = {
+    async crear(toUserId: string, data: Omit<InvitacionCompartir, "id" | "creadoEn">): Promise<string> {
+        const ref = await addDoc(
+            collection(db, "users", toUserId, "invitaciones"),
+            cleanData({ ...data, creadoEn: serverTimestamp() })
+        );
+        return ref.id;
+    },
+
+    async rechazar(toUserId: string, invitacionId: string): Promise<void> {
+        await updateDoc(
+            doc(db, "users", toUserId, "invitaciones", invitacionId),
+            { estado: "rechazada" }
+        );
+    },
+
+    subscribe(userId: string, callback: (invitaciones: InvitacionCompartir[]) => void) {
+        return onSnapshot(
+            query(
+                collection(db, "users", userId, "invitaciones"),
+                where("estado", "==", "pendiente"),
+            ),
+            (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as InvitacionCompartir)))
+        );
+    },
+};
+
 // ─── Sharing selectivo ────────────────────────────────────────────────────────
 export const sharingService = {
-    // Compartir un compromiso con otro usuario por código
+    // Envía una invitación al destinatario (no copia directa — requiere aceptación)
     async compartirCompromiso(
         spaceId: string,
         compromisoId: string,
@@ -219,7 +247,7 @@ export const sharingService = {
             const toUserId = toMembers[0];
             if (toUserId === fromUserId) return { ok: false, error: "No podés compartir contigo mismo" };
 
-            // Agregar fromUserId al compartidoCon del compromiso
+            // Verificar que el compromiso exista y no esté ya compartido con esa persona
             const compRef = spaceDoc(spaceId, "compromisos", compromisoId);
             const compSnap = await getDoc(compRef);
             if (!compSnap.exists()) return { ok: false, error: "Compromiso no encontrado" };
@@ -228,34 +256,25 @@ export const sharingService = {
             const compartidoCon: string[] = current.compartidoCon ?? [];
             if (compartidoCon.includes(toUserId)) return { ok: false, error: "Ya está compartido con ese usuario" };
 
-            const toSpaceId = snap.docs[0].id;
-            const compartidoConSpaces: Record<string, string> = current.compartidoConSpaces ?? {};
-            const compartidoConDocIds: Record<string, string> = current.compartidoConDocIds ?? {};
-
-            // Copiar el compromiso al space del destinatario y capturar el docId
-            const compData = compSnap.data();
-            const copyRef = await addDoc(spaceCol(toSpaceId, "compromisos"), cleanData({
-                ...compData,
-                esCompartido: true,
-                spaceOwner: fromUserId,
-                spaceOwnerId: spaceId,
-                compromisoOriginalId: compromisoId,
-                compartidoCon: [toUserId],
-                creadoEn: serverTimestamp(),
-            }));
-
-            // Guardar spaceId y docId del destinatario en el compromiso original
-            await updateDoc(compRef, {
-                compartidoCon: [...compartidoCon, toUserId],
-                compartidoConSpaces: { ...compartidoConSpaces, [toUserId]: toSpaceId },
-                compartidoConDocIds: { ...compartidoConDocIds, [toUserId]: copyRef.id },
-                spaceOwner: fromUserId,
+            // Crear invitación en users/{toUserId}/invitaciones/
+            await invitacionesService.crear(toUserId, {
+                compromisoId,
+                compromisoNombre: current.nombre,
+                compromisoMonto: current.monto,
+                compromisoCategoria: current.categoria,
+                compromisoFrecuencia: current.frecuencia,
+                compromisoIcono: current.icono,
+                fromSpaceId: spaceId,
+                fromUserId,
+                fromUserName,
+                toUserId,
+                estado: "pendiente",
             });
 
             return { ok: true };
         } catch (err) {
             console.error(err);
-            return { ok: false, error: "Error al compartir" };
+            return { ok: false, error: "Error al enviar la invitación" };
         }
     },
 

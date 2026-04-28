@@ -28,7 +28,7 @@ export default function CompartirSheet({ compromiso: c, space, userId, userName,
             userName,
             compartirCode,
         );
-        setMsg({ ok: result.ok, text: result.error ?? "¡Compartido exitosamente!" });
+        setMsg({ ok: result.ok, text: result.error ?? "¡Invitación enviada! La otra persona debe aceptarla." });
         setLoading(false);
         if (result.ok) {
             setCompartirCode("");
@@ -54,7 +54,7 @@ export default function CompartirSheet({ compromiso: c, space, userId, userName,
             </div>
 
             <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-2)", marginBottom: "var(--space-4)", lineHeight: 1.6 }}>
-                Ingresá el código de invitación de la persona con quien querés compartir este compromiso. Ambos recibirán recordatorios.
+                Ingresá el código de la persona con quien querés compartir. Le llegará una notificación para aceptar o rechazar el compromiso.
             </p>
 
             <div className="input-group">

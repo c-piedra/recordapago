@@ -1,7 +1,7 @@
 "use client";
 import { create } from "zustand";
-import type { Compromiso, HistorialPago, AppSettings, Space, PerfilFinanciero, Moneda, GastoVariable, GastoVariableEntrada, PeriodoGastoVariable } from "@/types";
-import { compromisosService, historialService, settingsService, spacesService, gastosVariablesService, gastosVariableEntradasService } from "@/lib/firestore";
+import type { Compromiso, HistorialPago, AppSettings, Space, PerfilFinanciero, Moneda, GastoVariable, GastoVariableEntrada, PeriodoGastoVariable, InvitacionCompartir } from "@/types";
+import { compromisosService, historialService, settingsService, spacesService, gastosVariablesService, gastosVariableEntradasService, invitacionesService } from "@/lib/firestore";
 import { calcProximaFecha } from "@/lib/utils";
 
 interface AppStore {
@@ -9,6 +9,7 @@ interface AppStore {
     historial: HistorialPago[];
     gastosVariables: GastoVariable[];
     gastosVariableEntradas: GastoVariableEntrada[];
+    invitaciones: InvitacionCompartir[];
     settings: AppSettings;
     space: Space | null;
     activeTab: string;
@@ -23,6 +24,8 @@ interface AppStore {
     deleteGastoVariable: (id: string) => Promise<void>;
     addGastoVariableEntrada: (e: Omit<GastoVariableEntrada, "id">) => Promise<void>;
     deleteGastoVariableEntrada: (id: string) => Promise<void>;
+    aceptarInvitacion: (invitacionId: string) => Promise<{ ok: boolean; error?: string }>;
+    rechazarInvitacion: (invitacionId: string) => Promise<void>;
 
     updatePerfil: (perfil: PerfilFinanciero) => void;
     getFinanzasStats: () => {
@@ -90,6 +93,7 @@ export const useStore = create<AppStore>()((set, get) => ({
     historial: [],
     gastosVariables: [],
     gastosVariableEntradas: [],
+    invitaciones: [],
     space: null,
     activeTab: "dashboard",
     userId: null,
@@ -142,14 +146,17 @@ export const useStore = create<AppStore>()((set, get) => ({
     },
 
     initSubscriptions: () => {
-        const { space } = get();
+        const { space, userId } = get();
         if (!space) return () => { };
         const unsubCompromisos = compromisosService.subscribe(space.id, (compromisos) => set({ compromisos }));
         const unsubHistorial = historialService.subscribe(space.id, (historial) => set({ historial }));
         const unsubSpace = spacesService.subscribe(space.id, (space) => set({ space }));
         const unsubGastosVariables = gastosVariablesService.subscribe(space.id, (gastosVariables) => set({ gastosVariables }));
         const unsubGastosEntradas = gastosVariableEntradasService.subscribe(space.id, (gastosVariableEntradas) => set({ gastosVariableEntradas }));
-        return () => { unsubCompromisos(); unsubHistorial(); unsubSpace(); unsubGastosVariables(); unsubGastosEntradas(); };
+        const unsubInvitaciones = userId
+            ? invitacionesService.subscribe(userId, (invitaciones) => set({ invitaciones }))
+            : () => { };
+        return () => { unsubCompromisos(); unsubHistorial(); unsubSpace(); unsubGastosVariables(); unsubGastosEntradas(); unsubInvitaciones(); };
     },
 
     createSpace: async (userId, userName) => {
@@ -333,6 +340,31 @@ export const useStore = create<AppStore>()((set, get) => ({
         gastosVariableEntradasService.delete(space.id, id).catch(console.error);
     },
 
+    aceptarInvitacion: async (invitacionId) => {
+        const { userId, space } = get();
+        if (!userId || !space) return { ok: false, error: "Sin sesión" };
+        try {
+            const res = await fetch("/api/sharing/accept-invitation", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ invitacionId, toUserId: userId, toSpaceId: space.id }),
+            });
+            const data = await res.json();
+            if (!res.ok) return { ok: false, error: data.error ?? "Error al aceptar" };
+            return { ok: true };
+        } catch {
+            return { ok: false, error: "Error de conexión" };
+        }
+    },
+
+    rechazarInvitacion: async (invitacionId) => {
+        const { userId } = get();
+        if (!userId) return;
+        // Optimistic: remove from local state immediately
+        set((s) => ({ invitaciones: s.invitaciones.filter((i) => i.id !== invitacionId) }));
+        invitacionesService.rechazar(userId, invitacionId).catch(console.error);
+    },
+
     deleteHistorial: async (id) => {
         const { space } = get();
         if (!space) return;
@@ -412,11 +444,18 @@ export const useStore = create<AppStore>()((set, get) => ({
             ? Math.round((disponible / salarioMensual) * 100)
             : 0;
 
+        const metaAhorro = perfil?.metaAhorro ?? null;
+
         const alertas: string[] = [];
         if (porcentajeGastado > 70) alertas.push(`Tus compromisos consumen el ${porcentajeGastado}% de tu salario. Revisá si podés reducir gastos.`);
         if (porCategoria["suscripcion"] > salarioMensual * 0.1) alertas.push("Tus suscripciones superan el 10% de tu salario.");
         if (disponible < 0) alertas.push("Tus compromisos y gastos variables superan tu salario. Estás en números rojos.");
-        if (capacidadAhorro > 0 && capacidadAhorro < 10) alertas.push(`Tu capacidad de ahorro es del ${capacidadAhorro}%. Se recomienda al menos el 10% del salario.`);
+        if (metaAhorro !== null && capacidadAhorro < metaAhorro) {
+            const faltante = Math.round(salarioMensual * (metaAhorro - capacidadAhorro) / 100);
+            alertas.push(`Tu ahorro actual (${capacidadAhorro}%) está por debajo de tu meta (${metaAhorro}%). Te faltan ${new Intl.NumberFormat("es-CR", { style: "currency", currency: "CRC", maximumFractionDigits: 0 }).format(faltante)} para llegar.`);
+        } else if (metaAhorro === null && capacidadAhorro > 0 && capacidadAhorro < 10) {
+            alertas.push(`Tu capacidad de ahorro es del ${capacidadAhorro}%. Se recomienda al menos el 10% del salario.`);
+        }
 
         return { salarioMensual, totalCompromisos, totalVariablePresupuestado, totalVariableGastado, porcentajeGastado, disponible, porCategoria, alertas, capacidadAhorro };
     },
