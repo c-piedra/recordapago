@@ -29,7 +29,7 @@ export default function LandingScreen({ onStart, onLogin }: {
                         📲 Instalala en tu celular
                     </h2>
 
-                    {/* Grid: 1 col en móvil, 2 col en desktop */}
+                    {/* Grid: 1 col en móvil, 2 col en deskto */}
                     <div style={{
                         display: "grid",
                         gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
