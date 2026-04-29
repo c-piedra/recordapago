@@ -3,7 +3,7 @@ import {
     getDocs, onSnapshot, query, orderBy, serverTimestamp, where,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import type { Compromiso, HistorialPago, AppSettings, Space, GastoVariable, GastoVariableEntrada, InvitacionCompartir, MetaProyecto } from "@/types";
+import type { Compromiso, HistorialPago, AppSettings, Space, GastoVariable, GastoVariableEntrada, InvitacionCompartir, MetaProyecto, MetaAporte } from "@/types";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const cleanData = (data: object) =>
@@ -211,6 +211,23 @@ export const metasService = {
         return onSnapshot(
             query(spaceCol(spaceId, "metas"), orderBy("creadoEn", "asc")),
             (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as MetaProyecto)))
+        );
+    },
+};
+
+// ─── Aportes a metas ─────────────────────────────────────────────────────────
+export const metaAportesService = {
+    async add(spaceId: string, a: Omit<MetaAporte, "id">): Promise<string> {
+        const ref = await addDoc(spaceCol(spaceId, "metaAportes"), cleanData({ ...a, creadoEn: serverTimestamp() }));
+        return ref.id;
+    },
+    async delete(spaceId: string, id: string): Promise<void> {
+        await deleteDoc(spaceDoc(spaceId, "metaAportes", id));
+    },
+    subscribe(spaceId: string, callback: (aportes: MetaAporte[]) => void) {
+        return onSnapshot(
+            query(spaceCol(spaceId, "metaAportes"), orderBy("fecha", "desc")),
+            (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as MetaAporte)))
         );
     },
 };

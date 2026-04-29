@@ -5,7 +5,7 @@ import { fmt } from "@/lib/utils";
 import { Sheet, ConfirmDialog } from "@/components/ui";
 import { Plus, Trash2 } from "lucide-react";
 import EmojiPicker from "./compromisos/EmojiPicker";
-import type { MetaProyecto, Moneda } from "@/types";
+import type { MetaProyecto, MetaAporte, Moneda } from "@/types";
 
 type ProyectosTab = "metas" | "prestamos";
 
@@ -50,7 +50,7 @@ function fmtFecha(date: Date): string {
 
 // ─── Tab Metas ────────────────────────────────────────────────────────────────
 function MetasTab() {
-    const { metas, addMeta, deleteMeta, updateMeta, getFinanzasStats, tipoCambio, settings } = useStore();
+    const { metas, metaAportes, addMeta, deleteMeta, updateMeta, addMetaAporte, deleteMetaAporte, getFinanzasStats, tipoCambio, settings } = useStore();
     const stats = getFinanzasStats();
     const ahorroDisponible = Math.max(0, stats.disponible);
     const perfil = settings.perfil;
@@ -116,10 +116,19 @@ function MetasTab() {
                         <MetaCard
                             key={meta.id}
                             meta={meta}
+                            aportes={metaAportes.filter((a) => a.metaId === meta.id)}
                             ahorroDisponible={ahorroDisponible}
                             tipoCambio={tipoCambio}
                             onDelete={() => setConfirmDelete(meta.id)}
                             onUpdateAhorro={(val) => updateMeta(meta.id, { ahorroPersonalizado: val })}
+                            onAddAporte={(monto, nota) => addMetaAporte({
+                                metaId: meta.id,
+                                metaNombre: meta.nombre,
+                                monto,
+                                nota,
+                                fecha: new Date().toISOString().split("T")[0],
+                            })}
+                            onDeleteAporte={(id, monto) => deleteMetaAporte(id, meta.id, monto)}
                         />
                     ))}
                 </div>
@@ -146,29 +155,43 @@ function MetasTab() {
 }
 
 // ─── Tarjeta de meta ──────────────────────────────────────────────────────────
-function MetaCard({ meta, ahorroDisponible, tipoCambio, onDelete, onUpdateAhorro }: {
+function MetaCard({ meta, aportes, ahorroDisponible, tipoCambio, onDelete, onUpdateAhorro, onAddAporte, onDeleteAporte }: {
     meta: MetaProyecto;
+    aportes: MetaAporte[];
     ahorroDisponible: number;
     tipoCambio: number;
     onDelete: () => void;
     onUpdateAhorro: (val: number) => void;
+    onAddAporte: (monto: number, nota?: string) => void;
+    onDeleteAporte: (id: string, monto: number) => void;
 }) {
+    const [expandida, setExpandida] = useState(false);
     const [editandoAhorro, setEditandoAhorro] = useState(false);
     const [ahorroInput, setAhorroInput] = useState(String(meta.ahorroPersonalizado ?? ""));
+    const [showAporte, setShowAporte] = useState(false);
+    const [aporteInput, setAporteInput] = useState("");
+    const [aporteNota, setAporteNota] = useState("");
+    const [showAportes, setShowAportes] = useState(false);
 
     const ahorro = (meta.ahorroPersonalizado && meta.ahorroPersonalizado > 0) ? meta.ahorroPersonalizado : ahorroDisponible;
     const objetivoCRC = meta.moneda === "USD" ? meta.montoObjetivo * tipoCambio : meta.montoObjetivo;
-    const meses = ahorro > 0 ? Math.ceil(objetivoCRC / ahorro) : null;
+    const acumulado = meta.montoAcumulado ?? 0;
+    const restante = Math.max(0, objetivoCRC - acumulado);
+    const progresoPct = objetivoCRC > 0 ? Math.min(100, Math.round((acumulado / objetivoCRC) * 100)) : 0;
+    const meses = ahorro > 0 && restante > 0 ? Math.ceil(restante / ahorro) : restante === 0 ? 0 : null;
     const fechaEstimada = meses ? addMonths(new Date(), meses) : null;
+    const completada = acumulado >= objetivoCRC;
 
     const años = meses ? Math.floor(meses / 12) : 0;
     const mesesRestantes = meses ? meses % 12 : 0;
     const tiempoStr = meses === null ? "—"
+        : meses === 0 ? "¡Cumplida!"
         : años > 0 && mesesRestantes > 0 ? `${años} año${años > 1 ? "s" : ""} y ${mesesRestantes} mes${mesesRestantes > 1 ? "es" : ""}`
         : años > 0 ? `${años} año${años > 1 ? "s" : ""}`
         : `${meses} mes${meses > 1 ? "es" : ""}`;
 
-    const urgencia = meses !== null && meses <= 6 ? "var(--color-success)"
+    const urgencia = completada ? "#22c55e"
+        : meses !== null && meses <= 6 ? "var(--color-success)"
         : meses !== null && meses <= 24 ? "var(--color-warning)"
         : "var(--color-primary)";
 
@@ -184,119 +207,231 @@ function MetaCard({ meta, ahorroDisponible, tipoCambio, onDelete, onUpdateAhorro
             background: "var(--color-bg-elevated)",
             border: "1px solid var(--color-border)",
             borderRadius: "var(--radius-lg)",
-            padding: "var(--space-4)",
+            overflow: "hidden",
         }}>
-            {/* Header */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "var(--space-3)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-                    <span style={{ fontSize: 28 }}>{meta.icono || "🎯"}</span>
+            {/* ── Fila compacta (siempre visible) ── */}
+            <div
+                onClick={() => setExpandida((v) => !v)}
+                style={{
+                    padding: "var(--space-3) var(--space-4)",
+                    cursor: "pointer",
+                    display: "flex", alignItems: "center", gap: "var(--space-3)",
+                }}
+            >
+                <span style={{ fontSize: 26, flexShrink: 0 }}>{meta.icono || "🎯"}</span>
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                    {/* Nombre + monto */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 5 }}>
+                        <p style={{ fontWeight: 700, fontSize: "var(--text-sm)", color: "var(--color-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {meta.nombre}
+                        </p>
+                        <p style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "var(--text-sm)", color: "var(--color-text)", flexShrink: 0, marginLeft: 8 }}>
+                            {meta.moneda === "USD" ? "$" : "₡"}{meta.montoObjetivo.toLocaleString("es-CR")}
+                        </p>
+                    </div>
+                    {/* Mini barra */}
+                    <div style={{ height: 5, borderRadius: 3, background: "var(--color-bg)", overflow: "hidden", marginBottom: 4 }}>
+                        <div style={{
+                            height: "100%", width: `${Math.max(progresoPct > 0 ? 2 : 0, progresoPct)}%`,
+                            background: urgencia, borderRadius: 3, transition: "width 0.4s ease",
+                        }} />
+                    </div>
+                    {/* % + tiempo */}
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <span style={{ fontSize: 10, color: "var(--color-text-3)" }}>
+                            {completada ? "🎉 ¡Meta cumplida!" : `${progresoPct}% · faltan ${fmt(restante)}`}
+                        </span>
+                        <span style={{ fontSize: 10, color: urgencia, fontWeight: 600 }}>
+                            {tiempoStr}
+                            {fechaEstimada && !completada && ` · ${fechaEstimada.toLocaleDateString("es-CR", { month: "short", year: "numeric" })}`}
+                        </span>
+                    </div>
+                </div>
+
+                {/* Chevron */}
+                <span style={{ fontSize: 11, color: "var(--color-text-3)", flexShrink: 0, transition: "transform 0.2s", display: "inline-block", transform: expandida ? "rotate(180deg)" : "rotate(0deg)" }}>▼</span>
+            </div>
+
+            {/* ── Detalle expandible ── */}
+            {expandida && (
+                <div style={{ borderTop: "1px solid var(--color-border)", padding: "var(--space-3) var(--space-4)", display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+
+                    {/* Monto en CRC equivalente si es USD */}
+                    {meta.moneda === "USD" && (
+                        <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)" }}>
+                            ≈ {fmt(objetivoCRC)} al tipo de cambio actual
+                        </p>
+                    )}
+
+                    {/* Proyección 2x2 */}
+                    <div style={{
+                        background: "var(--color-bg)", borderRadius: "var(--radius-md)",
+                        padding: "var(--space-3)", display: "grid", gridTemplateColumns: "1fr 1fr",
+                        gap: "var(--space-2)",
+                    }}>
+                        <div>
+                            <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)", marginBottom: 2 }}>Tiempo estimado</p>
+                            <p style={{ fontWeight: 700, fontSize: "var(--text-sm)", color: urgencia }}>{tiempoStr}</p>
+                        </div>
+                        <div>
+                            <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)", marginBottom: 2 }}>Fecha estimada</p>
+                            <p style={{ fontWeight: 700, fontSize: "var(--text-sm)", color: "var(--color-text)" }}>
+                                {completada ? "¡Ya!" : fechaEstimada ? fmtFecha(fechaEstimada) : "Sin ahorro"}
+                            </p>
+                        </div>
+                        <div>
+                            <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)", marginBottom: 2 }}>Ahorrado</p>
+                            <p style={{ fontWeight: 700, fontSize: "var(--text-sm)", color: completada ? "#22c55e" : "var(--color-text)" }}>{fmt(acumulado)}</p>
+                        </div>
+                        <div>
+                            <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)", marginBottom: 2 }}>
+                                {meta.ahorroPersonalizado ? "Aportás por mes" : "Usando todo tu ahorro"}
+                            </p>
+                            <p style={{ fontWeight: 700, fontSize: "var(--text-sm)", color: meta.ahorroPersonalizado ? "var(--color-primary)" : "var(--color-text-3)" }}>
+                                {fmt(ahorro)}
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Barra progreso detallada */}
                     <div>
-                        <p style={{ fontWeight: 700, fontSize: "var(--text-sm)", color: "var(--color-text)" }}>{meta.nombre}</p>
-                        {meta.descripcion && (
-                            <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)" }}>{meta.descripcion}</p>
-                        )}
+                        <div style={{ height: 8, borderRadius: 4, background: "var(--color-bg)", overflow: "hidden" }}>
+                            <div style={{
+                                height: "100%", width: `${Math.max(progresoPct > 0 ? 2 : 0, progresoPct)}%`,
+                                background: completada ? "#22c55e" : urgencia,
+                                borderRadius: 4, transition: "width 0.6s ease",
+                            }} />
+                        </div>
                     </div>
-                </div>
-                <button onClick={onDelete} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-3)", padding: 4 }}>
-                    <Trash2 size={15} />
-                </button>
-            </div>
 
-            {/* Monto objetivo */}
-            <p style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "var(--text-2xl)", color: "var(--color-text)", marginBottom: "var(--space-3)" }}>
-                {meta.moneda === "USD" ? "$" : "₡"}{meta.montoObjetivo.toLocaleString("es-CR")}
-                {meta.moneda === "USD" && (
-                    <span style={{ fontSize: "var(--text-sm)", fontWeight: 400, color: "var(--color-text-3)", marginLeft: 6 }}>
-                        ≈ {fmt(objetivoCRC)}
-                    </span>
-                )}
-            </p>
-
-            {/* Proyección */}
-            <div style={{
-                background: "var(--color-bg)", borderRadius: "var(--radius-md)",
-                padding: "var(--space-3)", display: "grid", gridTemplateColumns: "1fr 1fr",
-                gap: "var(--space-2)", marginBottom: "var(--space-3)",
-            }}>
-                <div>
-                    <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)", marginBottom: 2 }}>Tiempo estimado</p>
-                    <p style={{ fontWeight: 700, fontSize: "var(--text-sm)", color: urgencia }}>{tiempoStr}</p>
-                </div>
-                <div>
-                    <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)", marginBottom: 2 }}>Fecha estimada</p>
-                    <p style={{ fontWeight: 700, fontSize: "var(--text-sm)", color: "var(--color-text)" }}>
-                        {fechaEstimada ? fmtFecha(fechaEstimada) : "Sin ahorro"}
-                    </p>
-                </div>
-                <div>
-                    <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)", marginBottom: 2 }}>Cuotas</p>
-                    <p style={{ fontWeight: 700, fontSize: "var(--text-sm)", color: "var(--color-text)" }}>{meses ?? "—"} pagos</p>
-                </div>
-                <div>
-                    <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)", marginBottom: 2 }}>
-                        {meta.ahorroPersonalizado ? "Aportás por mes" : "Usás todo tu ahorro"}
-                    </p>
-                    <p style={{ fontWeight: 700, fontSize: "var(--text-sm)", color: meta.ahorroPersonalizado ? "var(--color-primary)" : "var(--color-text-3)" }}>
-                        {fmt(ahorro)}
-                    </p>
-                </div>
-            </div>
-
-            {/* Barra */}
-            <div style={{ height: 6, borderRadius: 3, background: "var(--color-bg)", overflow: "hidden", marginBottom: "var(--space-3)" }}>
-                <div style={{ height: "100%", width: "3%", background: urgencia, borderRadius: 3, transition: "width 0.5s ease" }} />
-            </div>
-
-            {/* Botón / editor de aporte mensual */}
-            {!editandoAhorro ? (
-                <button
-                    onClick={() => { setAhorroInput(String(meta.ahorroPersonalizado ?? "")); setEditandoAhorro(true); }}
-                    style={{
-                        width: "100%", minHeight: 36,
-                        background: "var(--color-bg)", border: "1px dashed var(--color-border)",
-                        borderRadius: "var(--radius-md)", fontSize: "var(--text-xs)",
-                        color: "var(--color-text-3)", cursor: "pointer",
-                    }}
-                >
-                    {meta.ahorroPersonalizado
-                        ? `✏️ Aporte mensual: ${fmt(meta.ahorroPersonalizado)}`
-                        : "💰 ¿Cuánto querés destinar por mes a esta meta?"}
-                </button>
-            ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
-                    <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)" }}>
-                        Monto mensual para esta meta (máx disponible: {fmt(ahorroDisponible)})
-                    </p>
-                    <div style={{ display: "flex", gap: "var(--space-2)", alignItems: "center" }}>
-                        <span style={{ fontSize: "var(--text-sm)", fontWeight: 700, color: "var(--color-text-3)" }}>₡</span>
-                        <input
-                            className="input"
-                            type="number"
-                            value={ahorroInput}
-                            placeholder={String(Math.round(ahorroDisponible))}
-                            style={{ flex: 1, minHeight: 38 }}
-                            autoFocus
-                            onChange={(e) => setAhorroInput(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === "Enter") handleGuardarAhorro(); if (e.key === "Escape") setEditandoAhorro(false); }}
-                        />
-                    </div>
+                    {/* Botones de acción */}
                     <div style={{ display: "flex", gap: "var(--space-2)" }}>
-                        <button className="btn btn-primary" style={{ flex: 1, fontSize: "var(--text-xs)", minHeight: 34 }} onClick={handleGuardarAhorro}>
-                            Guardar
+                        <button
+                            className="btn btn-primary"
+                            style={{ flex: 1, fontSize: "var(--text-xs)", minHeight: 34 }}
+                            onClick={() => setShowAporte(!showAporte)}
+                            disabled={completada}
+                        >
+                            💰 Registrar aporte
                         </button>
-                        <button className="btn btn-ghost" style={{ flex: 1, fontSize: "var(--text-xs)", minHeight: 34 }} onClick={() => setEditandoAhorro(false)}>
-                            Cancelar
-                        </button>
-                        {meta.ahorroPersonalizado && (
+                        {aportes.length > 0 && (
                             <button
                                 className="btn btn-ghost"
-                                style={{ fontSize: "var(--text-xs)", minHeight: 34, color: "var(--color-text-3)" }}
-                                onClick={() => { onUpdateAhorro(-1); setEditandoAhorro(false); }}
+                                style={{ fontSize: "var(--text-xs)", minHeight: 34, padding: "0 var(--space-3)" }}
+                                onClick={() => setShowAportes(!showAportes)}
                             >
-                                Usar todo
+                                {showAportes ? "Ocultar" : `${aportes.length} aportes`}
                             </button>
                         )}
+                        <button
+                            onClick={onDelete}
+                            style={{ background: "none", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", cursor: "pointer", color: "var(--color-text-3)", padding: "0 10px", minHeight: 34 }}
+                        >
+                            <Trash2 size={14} />
+                        </button>
                     </div>
+
+                    {/* Formulario de aporte */}
+                    {showAporte && (
+                        <div style={{ background: "var(--color-bg)", borderRadius: "var(--radius-md)", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+                            <div style={{ display: "flex", gap: "var(--space-2)", alignItems: "center" }}>
+                                <span style={{ fontSize: "var(--text-sm)", color: "var(--color-text-3)", fontWeight: 600 }}>₡</span>
+                                <input
+                                    className="input"
+                                    type="number"
+                                    value={aporteInput}
+                                    placeholder={String(Math.round(ahorro))}
+                                    style={{ flex: 1, minHeight: 36 }}
+                                    autoFocus
+                                    onChange={(e) => setAporteInput(e.target.value)}
+                                />
+                            </div>
+                            <input
+                                className="input"
+                                value={aporteNota}
+                                placeholder="Nota opcional (ej: quincena de abril)"
+                                style={{ minHeight: 36 }}
+                                onChange={(e) => setAporteNota(e.target.value)}
+                            />
+                            <div style={{ display: "flex", gap: "var(--space-2)" }}>
+                                <button className="btn btn-primary" style={{ flex: 1, fontSize: "var(--text-xs)", minHeight: 34 }}
+                                    onClick={() => {
+                                        const val = parseFloat(aporteInput);
+                                        if (!val || val <= 0) return;
+                                        onAddAporte(val, aporteNota || undefined);
+                                        setAporteInput(""); setAporteNota(""); setShowAporte(false);
+                                    }}>
+                                    Guardar
+                                </button>
+                                <button className="btn btn-ghost" style={{ flex: 1, fontSize: "var(--text-xs)", minHeight: 34 }} onClick={() => setShowAporte(false)}>
+                                    Cancelar
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Historial de aportes */}
+                    {showAportes && aportes.length > 0 && (
+                        <div style={{ background: "var(--color-bg)", borderRadius: "var(--radius-md)", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-1)" }}>
+                            {aportes.map((a) => (
+                                <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "var(--space-1) 0", borderBottom: "1px solid var(--color-border)" }}>
+                                    <div>
+                                        <p style={{ fontSize: "var(--text-xs)", fontWeight: 600, color: "var(--color-text)" }}>{fmt(a.monto)}</p>
+                                        <p style={{ fontSize: 10, color: "var(--color-text-3)" }}>{a.fecha}{a.nota ? ` · ${a.nota}` : ""}</p>
+                                    </div>
+                                    <button onClick={() => onDeleteAporte(a.id, a.monto)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-3)", padding: 4 }}>
+                                        <Trash2 size={13} />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Editor aporte mensual */}
+                    {!editandoAhorro ? (
+                        <button
+                            onClick={() => { setAhorroInput(String(meta.ahorroPersonalizado ?? "")); setEditandoAhorro(true); }}
+                            style={{
+                                width: "100%", minHeight: 34,
+                                background: "var(--color-bg)", border: "1px dashed var(--color-border)",
+                                borderRadius: "var(--radius-md)", fontSize: "var(--text-xs)",
+                                color: "var(--color-text-3)", cursor: "pointer",
+                            }}
+                        >
+                            {meta.ahorroPersonalizado
+                                ? `✏️ Aporte mensual: ${fmt(meta.ahorroPersonalizado)}`
+                                : "💡 Personalizar aporte mensual"}
+                        </button>
+                    ) : (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+                            <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)" }}>
+                                Monto mensual para esta meta (disponible: {fmt(ahorroDisponible)})
+                            </p>
+                            <div style={{ display: "flex", gap: "var(--space-2)", alignItems: "center" }}>
+                                <span style={{ fontSize: "var(--text-sm)", fontWeight: 700, color: "var(--color-text-3)" }}>₡</span>
+                                <input
+                                    className="input" type="number"
+                                    value={ahorroInput}
+                                    placeholder={String(Math.round(ahorroDisponible))}
+                                    style={{ flex: 1, minHeight: 38 }}
+                                    autoFocus
+                                    onChange={(e) => setAhorroInput(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === "Enter") handleGuardarAhorro(); if (e.key === "Escape") setEditandoAhorro(false); }}
+                                />
+                            </div>
+                            <div style={{ display: "flex", gap: "var(--space-2)" }}>
+                                <button className="btn btn-primary" style={{ flex: 1, fontSize: "var(--text-xs)", minHeight: 34 }} onClick={handleGuardarAhorro}>Guardar</button>
+                                <button className="btn btn-ghost" style={{ flex: 1, fontSize: "var(--text-xs)", minHeight: 34 }} onClick={() => setEditandoAhorro(false)}>Cancelar</button>
+                                {meta.ahorroPersonalizado && (
+                                    <button className="btn btn-ghost" style={{ fontSize: "var(--text-xs)", minHeight: 34, color: "var(--color-text-3)" }}
+                                        onClick={() => { onUpdateAhorro(-1); setEditandoAhorro(false); }}>
+                                        Usar todo
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
         </div>

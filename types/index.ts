@@ -151,11 +151,22 @@ export interface GastoVariableEntrada {
 export interface MetaProyecto {
     id: string;
     nombre: string;
-    montoObjetivo: number;       // monto total que se quiere alcanzar
+    montoObjetivo: number;
     moneda: Moneda;
     icono?: string;
     descripcion?: string;
-    ahorroPersonalizado?: number; // override mensual en CRC (opcional)
+    ahorroPersonalizado?: number; // aporte mensual en CRC
+    montoAcumulado?: number;      // suma de aportes reales registrados
+    creadoEn?: any;
+}
+
+export interface MetaAporte {
+    id: string;
+    metaId: string;
+    metaNombre: string;
+    monto: number;
+    nota?: string;
+    fecha: string; // YYYY-MM-DD
     creadoEn?: any;
 }
 

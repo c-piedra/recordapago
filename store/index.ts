@@ -1,7 +1,7 @@
 "use client";
 import { create } from "zustand";
-import type { Compromiso, HistorialPago, AppSettings, Space, PerfilFinanciero, Moneda, GastoVariable, GastoVariableEntrada, PeriodoGastoVariable, InvitacionCompartir, MetaProyecto } from "@/types";
-import { compromisosService, historialService, settingsService, spacesService, gastosVariablesService, gastosVariableEntradasService, invitacionesService, metasService } from "@/lib/firestore";
+import type { Compromiso, HistorialPago, AppSettings, Space, PerfilFinanciero, Moneda, GastoVariable, GastoVariableEntrada, PeriodoGastoVariable, InvitacionCompartir, MetaProyecto, MetaAporte } from "@/types";
+import { compromisosService, historialService, settingsService, spacesService, gastosVariablesService, gastosVariableEntradasService, invitacionesService, metasService, metaAportesService } from "@/lib/firestore";
 import { calcProximaFecha } from "@/lib/utils";
 
 interface AppStore {
@@ -11,9 +11,12 @@ interface AppStore {
     gastosVariableEntradas: GastoVariableEntrada[];
     invitaciones: InvitacionCompartir[];
     metas: MetaProyecto[];
+    metaAportes: MetaAporte[];
     addMeta: (m: Omit<MetaProyecto, "id">) => Promise<void>;
     updateMeta: (id: string, data: Partial<MetaProyecto>) => Promise<void>;
     deleteMeta: (id: string) => Promise<void>;
+    addMetaAporte: (a: Omit<MetaAporte, "id">) => Promise<string | undefined>;
+    deleteMetaAporte: (id: string, metaId: string, monto: number) => Promise<void>;
     settings: AppSettings;
     space: Space | null;
     activeTab: string;
@@ -99,6 +102,7 @@ export const useStore = create<AppStore>()((set, get) => ({
     gastosVariableEntradas: [],
     invitaciones: [],
     metas: [],
+    metaAportes: [],
     space: null,
     activeTab: "dashboard",
     userId: null,
@@ -162,7 +166,8 @@ export const useStore = create<AppStore>()((set, get) => ({
             ? invitacionesService.subscribe(userId, (invitaciones) => set({ invitaciones }))
             : () => { };
         const unsubMetas = metasService.subscribe(space.id, (metas) => set({ metas }));
-        return () => { unsubCompromisos(); unsubHistorial(); unsubSpace(); unsubGastosVariables(); unsubGastosEntradas(); unsubInvitaciones(); unsubMetas(); };
+        const unsubMetaAportes = metaAportesService.subscribe(space.id, (metaAportes) => set({ metaAportes }));
+        return () => { unsubCompromisos(); unsubHistorial(); unsubSpace(); unsubGastosVariables(); unsubGastosEntradas(); unsubInvitaciones(); unsubMetas(); unsubMetaAportes(); };
     },
 
     createSpace: async (userId, userName) => {
@@ -388,8 +393,45 @@ export const useStore = create<AppStore>()((set, get) => ({
     deleteMeta: async (id) => {
         const { space } = get();
         if (!space) return;
-        set((s) => ({ metas: s.metas.filter((m) => m.id !== id) }));
+        set((s) => ({
+            metas: s.metas.filter((m) => m.id !== id),
+            metaAportes: s.metaAportes.filter((a) => a.metaId !== id),
+        }));
         metasService.delete(space.id, id).catch(console.error);
+    },
+
+    addMetaAporte: async (a) => {
+        const { space } = get();
+        if (!space) return;
+        const tempId = uid();
+        // Actualizar montoAcumulado en la meta
+        set((s) => ({
+            metaAportes: [{ ...a, id: tempId }, ...s.metaAportes],
+            metas: s.metas.map((m) => m.id === a.metaId
+                ? { ...m, montoAcumulado: (m.montoAcumulado ?? 0) + a.monto }
+                : m
+            ),
+        }));
+        const ref = await metaAportesService.add(space.id, a);
+        // Sincronizar montoAcumulado en Firestore
+        const meta = get().metas.find((m) => m.id === a.metaId);
+        if (meta) metasService.update(space.id, a.metaId, { montoAcumulado: meta.montoAcumulado ?? 0 }).catch(console.error);
+        return ref;
+    },
+
+    deleteMetaAporte: async (id, metaId, monto) => {
+        const { space } = get();
+        if (!space) return;
+        set((s) => ({
+            metaAportes: s.metaAportes.filter((a) => a.id !== id),
+            metas: s.metas.map((m) => m.id === metaId
+                ? { ...m, montoAcumulado: Math.max(0, (m.montoAcumulado ?? 0) - monto) }
+                : m
+            ),
+        }));
+        await metaAportesService.delete(space.id, id);
+        const meta = get().metas.find((m) => m.id === metaId);
+        if (meta) metasService.update(space.id, metaId, { montoAcumulado: meta.montoAcumulado ?? 0 }).catch(console.error);
     },
 
     deleteHistorial: async (id) => {

@@ -8,6 +8,7 @@ import FinanzasHero from "./finanzas/FinanzasHero";
 import AlertasFinancieras from "./finanzas/AlertasFinancieras";
 import GraficasSection from "./finanzas/GraficasSection";
 import GastosPorCategoria from "./finanzas/GastosPorCategoria";
+import AhorroCard from "./finanzas/AhorroCard";
 import ConsejoIA from "./finanzas/ConsejoIA";
 
 type ChartTab = "distribucion" | "resumen" | "evolucion";
@@ -145,6 +146,14 @@ export default function FinanzasScreen() {
 
             <AlertasFinancieras alertas={stats.alertas} />
 
+            {/* Ahorro — siempre visible antes de gráficas */}
+            <AhorroCard
+                salarioMensual={stats.salarioMensual}
+                disponible={stats.disponible}
+                metaAhorro={perfil?.metaAhorro ?? null}
+                onSetMetaAhorro={handleSetMetaAhorro}
+            />
+
             <GraficasSection
                 chartTab={chartTab}
                 onTabChange={setChartTab}
@@ -156,9 +165,6 @@ export default function FinanzasScreen() {
             <GastosPorCategoria
                 porCategoria={stats.porCategoria}
                 salarioMensual={stats.salarioMensual}
-                disponible={stats.disponible}
-                metaAhorro={perfil?.metaAhorro ?? null}
-                onSetMetaAhorro={handleSetMetaAhorro}
             />
 
             <ConsejoIA
