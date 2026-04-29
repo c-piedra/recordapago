@@ -148,6 +148,17 @@ export interface GastoVariableEntrada {
     creadoEn?: any;
 }
 
+export interface MetaProyecto {
+    id: string;
+    nombre: string;
+    montoObjetivo: number;       // monto total que se quiere alcanzar
+    moneda: Moneda;
+    icono?: string;
+    descripcion?: string;
+    ahorroPersonalizado?: number; // override mensual en CRC (opcional)
+    creadoEn?: any;
+}
+
 export interface InvitacionCompartir {
     id: string;
     compromisoId: string;

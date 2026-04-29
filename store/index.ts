@@ -1,7 +1,7 @@
 "use client";
 import { create } from "zustand";
-import type { Compromiso, HistorialPago, AppSettings, Space, PerfilFinanciero, Moneda, GastoVariable, GastoVariableEntrada, PeriodoGastoVariable, InvitacionCompartir } from "@/types";
-import { compromisosService, historialService, settingsService, spacesService, gastosVariablesService, gastosVariableEntradasService, invitacionesService } from "@/lib/firestore";
+import type { Compromiso, HistorialPago, AppSettings, Space, PerfilFinanciero, Moneda, GastoVariable, GastoVariableEntrada, PeriodoGastoVariable, InvitacionCompartir, MetaProyecto } from "@/types";
+import { compromisosService, historialService, settingsService, spacesService, gastosVariablesService, gastosVariableEntradasService, invitacionesService, metasService } from "@/lib/firestore";
 import { calcProximaFecha } from "@/lib/utils";
 
 interface AppStore {
@@ -10,6 +10,10 @@ interface AppStore {
     gastosVariables: GastoVariable[];
     gastosVariableEntradas: GastoVariableEntrada[];
     invitaciones: InvitacionCompartir[];
+    metas: MetaProyecto[];
+    addMeta: (m: Omit<MetaProyecto, "id">) => Promise<void>;
+    updateMeta: (id: string, data: Partial<MetaProyecto>) => Promise<void>;
+    deleteMeta: (id: string) => Promise<void>;
     settings: AppSettings;
     space: Space | null;
     activeTab: string;
@@ -94,6 +98,7 @@ export const useStore = create<AppStore>()((set, get) => ({
     gastosVariables: [],
     gastosVariableEntradas: [],
     invitaciones: [],
+    metas: [],
     space: null,
     activeTab: "dashboard",
     userId: null,
@@ -156,7 +161,8 @@ export const useStore = create<AppStore>()((set, get) => ({
         const unsubInvitaciones = userId
             ? invitacionesService.subscribe(userId, (invitaciones) => set({ invitaciones }))
             : () => { };
-        return () => { unsubCompromisos(); unsubHistorial(); unsubSpace(); unsubGastosVariables(); unsubGastosEntradas(); unsubInvitaciones(); };
+        const unsubMetas = metasService.subscribe(space.id, (metas) => set({ metas }));
+        return () => { unsubCompromisos(); unsubHistorial(); unsubSpace(); unsubGastosVariables(); unsubGastosEntradas(); unsubInvitaciones(); unsubMetas(); };
     },
 
     createSpace: async (userId, userName) => {
@@ -360,9 +366,30 @@ export const useStore = create<AppStore>()((set, get) => ({
     rechazarInvitacion: async (invitacionId) => {
         const { userId } = get();
         if (!userId) return;
-        // Optimistic: remove from local state immediately
         set((s) => ({ invitaciones: s.invitaciones.filter((i) => i.id !== invitacionId) }));
         invitacionesService.rechazar(userId, invitacionId).catch(console.error);
+    },
+
+    addMeta: async (m) => {
+        const { space } = get();
+        if (!space) return;
+        const tempId = uid();
+        set((s) => ({ metas: [...s.metas, { ...m, id: tempId }] }));
+        metasService.add(space.id, m).catch(console.error);
+    },
+
+    updateMeta: async (id, data) => {
+        const { space } = get();
+        if (!space) return;
+        set((s) => ({ metas: s.metas.map((m) => m.id === id ? { ...m, ...data } : m) }));
+        metasService.update(space.id, id, data).catch(console.error);
+    },
+
+    deleteMeta: async (id) => {
+        const { space } = get();
+        if (!space) return;
+        set((s) => ({ metas: s.metas.filter((m) => m.id !== id) }));
+        metasService.delete(space.id, id).catch(console.error);
     },
 
     deleteHistorial: async (id) => {

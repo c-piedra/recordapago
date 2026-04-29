@@ -10,14 +10,19 @@ import CompromisosScreen from "@/components/modules/CompromisosScreen";
 import HistorialScreen from "@/components/modules/HistorialScreen";
 import AjustesScreen from "@/components/modules/AjustesScreen";
 import FinanzasScreen from "@/components/modules/FinanzasScreen";
+import ProyectosScreen from "@/components/modules/ProyectosScreen";
+import MasScreen from "@/components/modules/MasScreen";
 import LoginScreen from "@/components/modules/LoginScreen";
 import InvitacionesBanner from "@/components/modules/InvitacionesBanner";
 const SCREENS: Record<string, React.ComponentType> = {
-  dashboard: DashboardScreen,
+  dashboard:   DashboardScreen,
   compromisos: CompromisosScreen,
-  finanzas: FinanzasScreen,
-  historial: HistorialScreen,
-  ajustes: AjustesScreen,
+  finanzas:    FinanzasScreen,
+  proyectos:   ProyectosScreen,
+  mas:         MasScreen,
+  // Mantenidos para compatibilidad con links internos
+  historial:   HistorialScreen,
+  ajustes:     AjustesScreen,
 };
 export default function AppPage() {
   const { activeTab, setUserId, setUserName, loadSettings, initSpace, initSubscriptions } = useStore();

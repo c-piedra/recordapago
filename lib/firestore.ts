@@ -3,7 +3,7 @@ import {
     getDocs, onSnapshot, query, orderBy, serverTimestamp, where,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import type { Compromiso, HistorialPago, AppSettings, Space, GastoVariable, GastoVariableEntrada, InvitacionCompartir } from "@/types";
+import type { Compromiso, HistorialPago, AppSettings, Space, GastoVariable, GastoVariableEntrada, InvitacionCompartir, MetaProyecto } from "@/types";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const cleanData = (data: object) =>
@@ -195,6 +195,26 @@ export const pushService = {
     },
 
 };
+// ─── Metas de proyecto ────────────────────────────────────────────────────────
+export const metasService = {
+    async add(spaceId: string, m: Omit<MetaProyecto, "id">): Promise<string> {
+        const ref = await addDoc(spaceCol(spaceId, "metas"), cleanData({ ...m, creadoEn: serverTimestamp() }));
+        return ref.id;
+    },
+    async update(spaceId: string, id: string, data: Partial<MetaProyecto>): Promise<void> {
+        await updateDoc(spaceDoc(spaceId, "metas", id), cleanData(data));
+    },
+    async delete(spaceId: string, id: string): Promise<void> {
+        await deleteDoc(spaceDoc(spaceId, "metas", id));
+    },
+    subscribe(spaceId: string, callback: (metas: MetaProyecto[]) => void) {
+        return onSnapshot(
+            query(spaceCol(spaceId, "metas"), orderBy("creadoEn", "asc")),
+            (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as MetaProyecto)))
+        );
+    },
+};
+
 // ─── Invitaciones de compartir ────────────────────────────────────────────────
 export const invitacionesService = {
     async crear(toUserId: string, data: Omit<InvitacionCompartir, "id" | "creadoEn">): Promise<string> {
