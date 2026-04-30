@@ -1,15 +1,70 @@
 "use client";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useStore } from "@/store";
 import DashboardHero from "./dashboard/DashboardHero";
 import ProximosPagosList from "./dashboard/ProximosPagosList";
 import SaludFinancieraCard from "./dashboard/SaludFinancieraCard";
 import ResumenMesCard from "./dashboard/ResumenMesCard";
 import MetasResumenCard from "./dashboard/MetasResumenCard";
+import { ConfirmDialog } from "@/components/ui";
 import { fmt } from "@/lib/utils";
+import { Trash2 } from "lucide-react";
 import type { Compromiso, HistorialPago, CuentaAhorroAporte } from "@/types";
 
 type StatFilter = "proximos" | "vencidos" | "pagados" | null;
+
+// ─── Swipe-to-delete ──────────────────────────────────────────────────────────
+function SwipeToDelete({ children, onDelete }: { children: React.ReactNode; onDelete: () => void }) {
+    const [offsetX, setOffsetX] = useState(0);
+    const startX = useRef(0);
+    const isDragging = useRef(false);
+    const REVEAL = -72;
+    const THRESHOLD = -50;
+
+    const onTouchStart = (e: React.TouchEvent) => {
+        startX.current = e.touches[0].clientX;
+        isDragging.current = true;
+    };
+    const onTouchMove = (e: React.TouchEvent) => {
+        if (!isDragging.current) return;
+        const dx = e.touches[0].clientX - startX.current;
+        setOffsetX(Math.max(REVEAL, Math.min(0, dx)));
+    };
+    const onTouchEnd = () => {
+        isDragging.current = false;
+        setOffsetX(offsetX <= THRESHOLD ? REVEAL : 0);
+    };
+
+    return (
+        <div style={{ position: "relative", overflow: "hidden", borderRadius: "var(--radius-md)" }}>
+            {/* Red delete strip */}
+            <div
+                onClick={onDelete}
+                style={{
+                    position: "absolute", right: 0, top: 0, bottom: 0, width: Math.abs(REVEAL),
+                    background: "#ef4444", cursor: "pointer",
+                    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2,
+                }}
+            >
+                <Trash2 size={16} color="white" />
+                <span style={{ fontSize: 9, color: "white", fontWeight: 700 }}>Eliminar</span>
+            </div>
+            {/* Item */}
+            <div
+                style={{
+                    transform: `translateX(${offsetX}px)`,
+                    transition: isDragging.current ? "none" : "transform 0.2s ease",
+                    position: "relative", zIndex: 1,
+                }}
+                onTouchStart={onTouchStart}
+                onTouchMove={onTouchMove}
+                onTouchEnd={onTouchEnd}
+            >
+                {children}
+            </div>
+        </div>
+    );
+}
 
 export default function DashboardScreen() {
     const {
@@ -45,7 +100,7 @@ export default function DashboardScreen() {
         .filter((c) => c.proximaFecha < hoyStr)
         .sort((a, b) => a.proximaFecha.localeCompare(b.proximaFecha));
 
-    const mesActual = hoy.toISOString().slice(0, 7); // YYYY-MM
+    const mesActual = hoy.toISOString().slice(0, 7);
     const pagadosList = historial.filter((h) => h.fecha.startsWith(mesActual));
     const ahorrosMes = cuentaAhorroAportes.filter((a) => a.fecha.startsWith(mesActual));
 
@@ -95,7 +150,6 @@ export default function DashboardScreen() {
                 </div>
             )}
 
-            {/* Hero */}
             <DashboardHero
                 saludo={saludo}
                 nombre={nombre}
@@ -105,7 +159,6 @@ export default function DashboardScreen() {
                 stats={heroStats}
             />
 
-            {/* Salud financiera — solo si tiene salario configurado */}
             {finanzas.salarioMensual > 0 && (
                 <SaludFinancieraCard
                     salarioMensual={finanzas.salarioMensual}
@@ -117,7 +170,6 @@ export default function DashboardScreen() {
                 />
             )}
 
-            {/* Resumen del mes */}
             <ResumenMesCard
                 historial={historial}
                 compromisos={compromisos}
@@ -125,7 +177,6 @@ export default function DashboardScreen() {
                 onVerHistorial={() => setActiveTab("mas")}
             />
 
-            {/* Metas activas */}
             <MetasResumenCard
                 metas={metas}
                 ahorroMensual={Math.max(0, finanzas.disponible)}
@@ -133,7 +184,6 @@ export default function DashboardScreen() {
                 onVerMetas={() => setActiveTab("proyectos")}
             />
 
-            {/* Próximos pagos */}
             <ProximosPagosList
                 proximos={proximosList}
                 onVerTodos={() => setActiveTab("compromisos")}
@@ -143,7 +193,6 @@ export default function DashboardScreen() {
                 }}
             />
 
-            {/* Sheet de stats */}
             {statFilter && (
                 <StatSheet
                     filter={statFilter}
@@ -171,6 +220,9 @@ function StatSheet({
     onClose: () => void;
     onIrACompromisos: () => void;
 }) {
+    const { deleteHistorial, deleteCuentaAhorroAporte } = useStore();
+    const [confirmLimpiar, setConfirmLimpiar] = useState(false);
+
     const hoy = new Date();
     const hoyMidnight = new Date(hoy); hoyMidnight.setHours(0, 0, 0, 0);
 
@@ -180,15 +232,20 @@ function StatSheet({
         pagados:  { icon: "✅", title: "Pagados este mes", color: "#22c55e", empty: "Aún no hay pagos este mes" },
     }[filter!];
 
+    const handleLimpiarMes = async () => {
+        for (const h of pagados) await deleteHistorial(h.id);
+        for (const a of ahorros) await deleteCuentaAhorroAporte(a.id, a.cuentaId, a.monto);
+        setConfirmLimpiar(false);
+    };
+
+    const hayPagados = pagados.length > 0 || ahorros.length > 0;
+
     return (
         <>
             {/* Backdrop */}
             <div
                 onClick={onClose}
-                style={{
-                    position: "fixed", inset: 0, zIndex: 50,
-                    background: "rgba(0,0,0,0.6)", backdropFilter: "blur(2px)",
-                }}
+                style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(2px)" }}
             />
             {/* Panel */}
             <div style={{
@@ -204,62 +261,83 @@ function StatSheet({
                 <div style={{ width: 36, height: 4, borderRadius: 2, background: "var(--color-border)", margin: "0 auto var(--space-4)" }} />
 
                 {/* Header */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-4)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-3)" }}>
                     <p style={{ fontWeight: 700, fontSize: "var(--text-base)", color: "var(--color-text)" }}>
                         {config.icon} {config.title}
                     </p>
-                    <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-3)", fontSize: 20 }}>✕</button>
+                    <div style={{ display: "flex", gap: "var(--space-2)", alignItems: "center" }}>
+                        {filter === "pagados" && hayPagados && (
+                            <button
+                                onClick={() => setConfirmLimpiar(true)}
+                                style={{
+                                    background: "none", border: "1px solid var(--color-border)",
+                                    borderRadius: "var(--radius-md)", cursor: "pointer",
+                                    color: "var(--color-text-3)", padding: "4px 10px",
+                                    display: "flex", alignItems: "center", gap: 5, fontSize: 11,
+                                }}
+                            >
+                                <Trash2 size={12} /> Limpiar mes
+                            </button>
+                        )}
+                        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-3)", fontSize: 20 }}>✕</button>
+                    </div>
                 </div>
+
+                {/* Hint swipe — solo pagados con items */}
+                {filter === "pagados" && hayPagados && (
+                    <p style={{ fontSize: 10, color: "var(--color-text-3)", marginBottom: "var(--space-2)", textAlign: "center" }}>
+                        ← Deslizá un ítem hacia la izquierda para eliminarlo
+                    </p>
+                )}
 
                 {/* Lista */}
                 <div style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
                     {filter === "pagados" ? (
-                        pagados.length === 0 && ahorros.length === 0 ? (
+                        !hayPagados ? (
                             <p style={{ textAlign: "center", color: "var(--color-text-3)", fontSize: "var(--text-sm)", padding: "var(--space-6) 0" }}>{config.empty}</p>
                         ) : (
                             <>
                                 {pagados.map((h) => (
-                                    <div key={h.id} style={{
-                                        background: "var(--color-bg)",
-                                        borderRadius: "var(--radius-md)",
-                                        padding: "var(--space-3)",
-                                        display: "flex", justifyContent: "space-between", alignItems: "center",
-                                    }}>
-                                        <div>
-                                            <p style={{ fontWeight: 600, fontSize: "var(--text-sm)", color: "var(--color-text)" }}>{h.compromisoNombre}</p>
-                                            <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)" }}>
-                                                {h.fecha}
-                                                {h.pagadoPorNombre ? ` · ${h.pagadoPorNombre}` : ""}
-                                            </p>
-                                        </div>
-                                        <p style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "var(--text-sm)", color: config.color }}>
-                                            {fmt(h.monto)}
-                                        </p>
-                                    </div>
-                                ))}
-                                {ahorros.map((a) => (
-                                    <div key={a.id} style={{
-                                        background: "var(--color-bg)",
-                                        borderRadius: "var(--radius-md)",
-                                        padding: "var(--space-3)",
-                                        display: "flex", justifyContent: "space-between", alignItems: "center",
-                                        borderLeft: "3px solid #22c55e",
-                                    }}>
-                                        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-                                            <span style={{ fontSize: 18 }}>🐷</span>
+                                    <SwipeToDelete key={h.id} onDelete={() => deleteHistorial(h.id)}>
+                                        <div style={{
+                                            background: "var(--color-bg)",
+                                            padding: "var(--space-3)",
+                                            display: "flex", justifyContent: "space-between", alignItems: "center",
+                                        }}>
                                             <div>
-                                                <p style={{ fontWeight: 600, fontSize: "var(--text-sm)", color: "var(--color-text)" }}>
-                                                    {a.cuentaNombre}
-                                                </p>
+                                                <p style={{ fontWeight: 600, fontSize: "var(--text-sm)", color: "var(--color-text)" }}>{h.compromisoNombre}</p>
                                                 <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)" }}>
-                                                    {a.fecha}{a.nota ? ` · ${a.nota}` : ""} · Ahorro
+                                                    {h.fecha}{h.pagadoPorNombre ? ` · ${h.pagadoPorNombre}` : ""}
                                                 </p>
                                             </div>
+                                            <p style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "var(--text-sm)", color: config.color }}>
+                                                {fmt(h.monto)}
+                                            </p>
                                         </div>
-                                        <p style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "var(--text-sm)", color: "#22c55e" }}>
-                                            {fmt(a.monto)}
-                                        </p>
-                                    </div>
+                                    </SwipeToDelete>
+                                ))}
+                                {ahorros.map((a) => (
+                                    <SwipeToDelete key={a.id} onDelete={() => deleteCuentaAhorroAporte(a.id, a.cuentaId, a.monto)}>
+                                        <div style={{
+                                            background: "var(--color-bg)",
+                                            padding: "var(--space-3)",
+                                            display: "flex", justifyContent: "space-between", alignItems: "center",
+                                            borderLeft: "3px solid #22c55e",
+                                        }}>
+                                            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+                                                <span style={{ fontSize: 18 }}>🐷</span>
+                                                <div>
+                                                    <p style={{ fontWeight: 600, fontSize: "var(--text-sm)", color: "var(--color-text)" }}>{a.cuentaNombre}</p>
+                                                    <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)" }}>
+                                                        {a.fecha}{a.nota ? ` · ${a.nota}` : ""} · Ahorro
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <p style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "var(--text-sm)", color: "#22c55e" }}>
+                                                {fmt(a.monto)}
+                                            </p>
+                                        </div>
+                                    </SwipeToDelete>
                                 ))}
                             </>
                         )
@@ -311,6 +389,14 @@ function StatSheet({
                     </button>
                 )}
             </div>
+
+            {confirmLimpiar && (
+                <ConfirmDialog
+                    message={`¿Limpiar todos los registros de pagados este mes? Esta acción no se puede deshacer.`}
+                    onConfirm={handleLimpiarMes}
+                    onCancel={() => setConfirmLimpiar(false)}
+                />
+            )}
         </>
     );
 }
