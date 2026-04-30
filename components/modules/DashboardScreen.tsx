@@ -1,5 +1,6 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useStore } from "@/store";
 import DashboardHero from "./dashboard/DashboardHero";
 import ProximosPagosList from "./dashboard/ProximosPagosList";
@@ -223,6 +224,13 @@ function StatSheet({
     const { deleteHistorial, deleteCuentaAhorroAporte } = useStore();
     const [confirmLimpiar, setConfirmLimpiar] = useState(false);
 
+    // Bloquear scroll del body mientras el sheet está abierto
+    useEffect(() => {
+        const prev = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+        return () => { document.body.style.overflow = prev; };
+    }, []);
+
     const hoy = new Date();
     const hoyMidnight = new Date(hoy); hoyMidnight.setHours(0, 0, 0, 0);
 
@@ -240,28 +248,40 @@ function StatSheet({
 
     const hayPagados = pagados.length > 0 || ahorros.length > 0;
 
-    return (
+    if (typeof window === "undefined") return null;
+
+    const content = (
         <>
-            {/* Backdrop */}
+            {/* Backdrop — toca para cerrar */}
             <div
                 onClick={onClose}
-                style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(2px)" }}
+                onTouchMove={(e) => e.preventDefault()}
+                style={{ position: "fixed", inset: 0, zIndex: 80, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(3px)" }}
             />
+
             {/* Panel */}
-            <div style={{
-                position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 51,
-                background: "var(--color-bg-elevated)",
-                borderRadius: "var(--radius-xl) var(--radius-xl) 0 0",
-                padding: "var(--space-5) var(--space-4) var(--space-8)",
-                maxHeight: "75vh",
-                display: "flex", flexDirection: "column",
-                boxShadow: "0 -8px 32px rgba(0,0,0,0.4)",
-            }}>
+            <div
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                    position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 81,
+                    background: "var(--color-bg-elevated)",
+                    borderRadius: "var(--radius-xl) var(--radius-xl) 0 0",
+                    border: "1px solid var(--color-border)",
+                    borderBottom: "none",
+                    paddingTop: "var(--space-4)",
+                    paddingLeft: "var(--space-4)",
+                    paddingRight: "var(--space-4)",
+                    paddingBottom: "calc(var(--space-8) + env(safe-area-inset-bottom, 0px))",
+                    maxHeight: "88dvh",
+                    display: "flex", flexDirection: "column",
+                    boxShadow: "0 -8px 32px rgba(0,0,0,0.5)",
+                }}
+            >
                 {/* Handle */}
-                <div style={{ width: 36, height: 4, borderRadius: 2, background: "var(--color-border)", margin: "0 auto var(--space-4)" }} />
+                <div style={{ width: 36, height: 4, borderRadius: 2, background: "var(--color-border)", margin: "0 auto var(--space-4)", flexShrink: 0 }} />
 
                 {/* Header */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-3)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-2)", flexShrink: 0 }}>
                     <p style={{ fontWeight: 700, fontSize: "var(--text-base)", color: "var(--color-text)" }}>
                         {config.icon} {config.title}
                     </p>
@@ -279,19 +299,25 @@ function StatSheet({
                                 <Trash2 size={12} /> Limpiar mes
                             </button>
                         )}
-                        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-3)", fontSize: 20 }}>✕</button>
+                        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-3)", fontSize: 20, padding: "0 4px" }}>✕</button>
                     </div>
                 </div>
 
-                {/* Hint swipe — solo pagados con items */}
+                {/* Hint swipe */}
                 {filter === "pagados" && hayPagados && (
-                    <p style={{ fontSize: 10, color: "var(--color-text-3)", marginBottom: "var(--space-2)", textAlign: "center" }}>
+                    <p style={{ fontSize: 10, color: "var(--color-text-3)", marginBottom: "var(--space-2)", textAlign: "center", flexShrink: 0 }}>
                         ← Deslizá un ítem hacia la izquierda para eliminarlo
                     </p>
                 )}
 
-                {/* Lista */}
-                <div style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+                {/* Lista — scroll contenido aquí */}
+                <div style={{
+                    overflowY: "auto",
+                    flex: 1,
+                    display: "flex", flexDirection: "column", gap: "var(--space-2)",
+                    WebkitOverflowScrolling: "touch" as any,
+                    overscrollBehavior: "contain",
+                }}>
                     {filter === "pagados" ? (
                         !hayPagados ? (
                             <p style={{ textAlign: "center", color: "var(--color-text-3)", fontSize: "var(--text-sm)", padding: "var(--space-6) 0" }}>{config.empty}</p>
@@ -300,8 +326,7 @@ function StatSheet({
                                 {pagados.map((h) => (
                                     <SwipeToDelete key={h.id} onDelete={() => deleteHistorial(h.id)}>
                                         <div style={{
-                                            background: "var(--color-bg)",
-                                            padding: "var(--space-3)",
+                                            background: "var(--color-bg)", padding: "var(--space-3)",
                                             display: "flex", justifyContent: "space-between", alignItems: "center",
                                         }}>
                                             <div>
@@ -319,8 +344,7 @@ function StatSheet({
                                 {ahorros.map((a) => (
                                     <SwipeToDelete key={a.id} onDelete={() => deleteCuentaAhorroAporte(a.id, a.cuentaId, a.monto)}>
                                         <div style={{
-                                            background: "var(--color-bg)",
-                                            padding: "var(--space-3)",
+                                            background: "var(--color-bg)", padding: "var(--space-3)",
                                             display: "flex", justifyContent: "space-between", alignItems: "center",
                                             borderLeft: "3px solid #22c55e",
                                         }}>
@@ -355,9 +379,7 @@ function StatSheet({
                                     : `en ${dias} día${dias !== 1 ? "s" : ""}`;
                                 return (
                                     <div key={c.id} style={{
-                                        background: "var(--color-bg)",
-                                        borderRadius: "var(--radius-md)",
-                                        padding: "var(--space-3)",
+                                        background: "var(--color-bg)", borderRadius: "var(--radius-md)", padding: "var(--space-3)",
                                         display: "flex", justifyContent: "space-between", alignItems: "center",
                                         borderLeft: `3px solid ${config.color}`,
                                     }}>
@@ -382,7 +404,7 @@ function StatSheet({
                 {filter !== "pagados" && (
                     <button
                         className="btn btn-primary"
-                        style={{ width: "100%", marginTop: "var(--space-3)" }}
+                        style={{ width: "100%", marginTop: "var(--space-3)", flexShrink: 0 }}
                         onClick={onIrACompromisos}
                     >
                         Ir a compromisos →
@@ -392,11 +414,13 @@ function StatSheet({
 
             {confirmLimpiar && (
                 <ConfirmDialog
-                    message={`¿Limpiar todos los registros de pagados este mes? Esta acción no se puede deshacer.`}
+                    message="¿Limpiar todos los registros de pagados este mes? Esta acción no se puede deshacer."
                     onConfirm={handleLimpiarMes}
                     onCancel={() => setConfirmLimpiar(false)}
                 />
             )}
         </>
     );
+
+    return createPortal(content, document.body);
 }
