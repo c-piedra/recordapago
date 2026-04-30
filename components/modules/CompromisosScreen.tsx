@@ -152,11 +152,11 @@ export default function CompromisosScreen() {
                 <button className={`tab-pill${tab === "activos" ? " active" : ""}`} onClick={() => setTab("activos")}>
                     Fijos ({activos.length})
                 </button>
-                <button className={`tab-pill${tab === "pausados" ? " active" : ""}`} onClick={() => setTab("pausados")}>
-                    Pausados ({pausados.length})
-                </button>
                 <button className={`tab-pill${tab === "variables" ? " active" : ""}`} onClick={() => setTab("variables")}>
                     Variables ({gastosVariables.length})
+                </button>
+                <button className={`tab-pill${tab === "pausados" ? " active" : ""}`} onClick={() => setTab("pausados")}>
+                    Pausados ({pausados.length})
                 </button>
             </div>
 

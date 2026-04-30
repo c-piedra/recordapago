@@ -6,6 +6,7 @@ interface StatItem {
     value: number;
     color: string;
     icon: string;
+    onClick?: () => void;
 }
 
 interface DashboardHeroProps {
@@ -69,19 +70,28 @@ export default function DashboardHero({ saludo, nombre, totalMensual, disponible
 
             {/* Stats */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "var(--space-2)" }}>
-                {stats.map(({ label, value, color, icon }) => (
-                    <div key={label} style={{
-                        background: "rgba(255,255,255,0.05)",
-                        borderRadius: "var(--radius-md)",
-                        padding: "var(--space-3)",
-                        textAlign: "center",
-                        border: "1px solid rgba(255,255,255,0.05)",
-                    }}>
+                {stats.map(({ label, value, color, icon, onClick }) => (
+                    <div
+                        key={label}
+                        onClick={onClick}
+                        style={{
+                            background: "rgba(255,255,255,0.05)",
+                            borderRadius: "var(--radius-md)",
+                            padding: "var(--space-3)",
+                            textAlign: "center",
+                            border: `1px solid ${onClick ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.05)"}`,
+                            cursor: onClick ? "pointer" : "default",
+                            transition: "background 0.15s, transform 0.1s",
+                        }}
+                        onMouseEnter={(e) => { if (onClick) (e.currentTarget as HTMLDivElement).style.background = "rgba(255,255,255,0.1)"; }}
+                        onMouseLeave={(e) => { if (onClick) (e.currentTarget as HTMLDivElement).style.background = "rgba(255,255,255,0.05)"; }}
+                    >
                         <p style={{ fontSize: 18, marginBottom: 2 }}>{icon}</p>
                         <p style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "var(--text-2xl)", color }}>
                             {value}
                         </p>
                         <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)", marginTop: 2 }}>{label}</p>
+                        {onClick && <p style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", marginTop: 1 }}>ver →</p>}
                     </div>
                 ))}
             </div>
