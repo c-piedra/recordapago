@@ -1,7 +1,7 @@
 "use client";
 import { create } from "zustand";
-import type { Compromiso, HistorialPago, AppSettings, Space, PerfilFinanciero, FuenteIngreso, Moneda, FrecuenciaSalario, GastoVariable, GastoVariableEntrada, PeriodoGastoVariable, InvitacionCompartir, MetaProyecto, MetaAporte } from "@/types";
-import { compromisosService, historialService, settingsService, spacesService, gastosVariablesService, gastosVariableEntradasService, invitacionesService, metasService, metaAportesService } from "@/lib/firestore";
+import type { Compromiso, HistorialPago, AppSettings, Space, PerfilFinanciero, FuenteIngreso, Moneda, FrecuenciaSalario, GastoVariable, GastoVariableEntrada, PeriodoGastoVariable, InvitacionCompartir, MetaProyecto, MetaAporte, CuentaAhorro, CuentaAhorroAporte } from "@/types";
+import { compromisosService, historialService, settingsService, spacesService, gastosVariablesService, gastosVariableEntradasService, invitacionesService, metasService, metaAportesService, cuentasAhorroService, cuentaAhorroAportesService } from "@/lib/firestore";
 import { calcProximaFecha } from "@/lib/utils";
 
 interface AppStore {
@@ -17,6 +17,13 @@ interface AppStore {
     deleteMeta: (id: string) => Promise<void>;
     addMetaAporte: (a: Omit<MetaAporte, "id">) => Promise<string | undefined>;
     deleteMetaAporte: (id: string, metaId: string, monto: number) => Promise<void>;
+    cuentasAhorro: CuentaAhorro[];
+    cuentaAhorroAportes: CuentaAhorroAporte[];
+    addCuentaAhorro: (c: Omit<CuentaAhorro, "id">) => Promise<void>;
+    updateCuentaAhorro: (id: string, data: Partial<CuentaAhorro>) => Promise<void>;
+    deleteCuentaAhorro: (id: string) => Promise<void>;
+    addCuentaAhorroAporte: (a: Omit<CuentaAhorroAporte, "id">) => Promise<void>;
+    deleteCuentaAhorroAporte: (id: string, cuentaId: string, monto: number) => Promise<void>;
     settings: AppSettings;
     space: Space | null;
     activeTab: string;
@@ -43,6 +50,7 @@ interface AppStore {
         totalCompromisos: number;
         totalVariablePresupuestado: number;
         totalVariableGastado: number;
+        totalAhorros: number;
         porcentajeGastado: number;
         disponible: number;
         capacidadAhorro: number;
@@ -115,6 +123,8 @@ export const useStore = create<AppStore>()((set, get) => ({
     invitaciones: [],
     metas: [],
     metaAportes: [],
+    cuentasAhorro: [],
+    cuentaAhorroAportes: [],
     space: null,
     activeTab: "dashboard",
     userId: null,
@@ -179,7 +189,9 @@ export const useStore = create<AppStore>()((set, get) => ({
             : () => { };
         const unsubMetas = metasService.subscribe(space.id, (metas) => set({ metas }));
         const unsubMetaAportes = metaAportesService.subscribe(space.id, (metaAportes) => set({ metaAportes }));
-        return () => { unsubCompromisos(); unsubHistorial(); unsubSpace(); unsubGastosVariables(); unsubGastosEntradas(); unsubInvitaciones(); unsubMetas(); unsubMetaAportes(); };
+        const unsubCuentasAhorro = cuentasAhorroService.subscribe(space.id, (cuentasAhorro) => set({ cuentasAhorro }));
+        const unsubCuentaAhorroAportes = cuentaAhorroAportesService.subscribe(space.id, (cuentaAhorroAportes) => set({ cuentaAhorroAportes }));
+        return () => { unsubCompromisos(); unsubHistorial(); unsubSpace(); unsubGastosVariables(); unsubGastosEntradas(); unsubInvitaciones(); unsubMetas(); unsubMetaAportes(); unsubCuentasAhorro(); unsubCuentaAhorroAportes(); };
     },
 
     createSpace: async (userId, userName) => {
@@ -478,6 +490,61 @@ export const useStore = create<AppStore>()((set, get) => ({
         };
     },
 
+    addCuentaAhorro: async (c) => {
+        const { space } = get();
+        if (!space) return;
+        const id = await cuentasAhorroService.add(space.id, c);
+        set((s) => ({ cuentasAhorro: [...s.cuentasAhorro, { ...c, id }] }));
+    },
+
+    updateCuentaAhorro: async (id, data) => {
+        const { space } = get();
+        if (!space) return;
+        set((s) => ({ cuentasAhorro: s.cuentasAhorro.map((c) => c.id === id ? { ...c, ...data } : c) }));
+        cuentasAhorroService.update(space.id, id, data).catch(console.error);
+    },
+
+    deleteCuentaAhorro: async (id) => {
+        const { space } = get();
+        if (!space) return;
+        set((s) => ({
+            cuentasAhorro: s.cuentasAhorro.filter((c) => c.id !== id),
+            cuentaAhorroAportes: s.cuentaAhorroAportes.filter((a) => a.cuentaId !== id),
+        }));
+        cuentasAhorroService.delete(space.id, id).catch(console.error);
+    },
+
+    addCuentaAhorroAporte: async (a) => {
+        const { space } = get();
+        if (!space) return;
+        const tempId = uid();
+        // Actualizar saldo localmente
+        set((s) => ({
+            cuentaAhorroAportes: [{ ...a, id: tempId }, ...s.cuentaAhorroAportes],
+            cuentasAhorro: s.cuentasAhorro.map((c) =>
+                c.id === a.cuentaId ? { ...c, saldo: c.saldo + a.monto } : c
+            ),
+        }));
+        await cuentaAhorroAportesService.add(space.id, a);
+        // Sincronizar saldo nuevo en Firestore
+        const cuenta = get().cuentasAhorro.find((c) => c.id === a.cuentaId);
+        if (cuenta) cuentasAhorroService.update(space.id, a.cuentaId, { saldo: cuenta.saldo }).catch(console.error);
+    },
+
+    deleteCuentaAhorroAporte: async (id, cuentaId, monto) => {
+        const { space } = get();
+        if (!space) return;
+        set((s) => ({
+            cuentaAhorroAportes: s.cuentaAhorroAportes.filter((a) => a.id !== id),
+            cuentasAhorro: s.cuentasAhorro.map((c) =>
+                c.id === cuentaId ? { ...c, saldo: Math.max(0, c.saldo - monto) } : c
+            ),
+        }));
+        await cuentaAhorroAportesService.delete(space.id, id);
+        const cuenta = get().cuentasAhorro.find((c) => c.id === cuentaId);
+        if (cuenta) cuentasAhorroService.update(space.id, cuentaId, { saldo: cuenta.saldo }).catch(console.error);
+    },
+
     updatePerfil: (perfil) => {
         set((state) => {
             const newSettings = { ...state.settings, perfil };
@@ -519,7 +586,7 @@ export const useStore = create<AppStore>()((set, get) => ({
     },
 
     getFinanzasStats: () => {
-        const { compromisos, settings, tipoCambio, gastosVariables, gastosVariableEntradas } = get();
+        const { compromisos, settings, tipoCambio, gastosVariables, gastosVariableEntradas, cuentaAhorroAportes } = get();
         const activos = compromisos.filter((c) => c.estado === "activo");
         const perfil = settings.perfil;
         // Si tiene múltiples fuentes usamos salarioMensual guardado (= suma de fuentes)
@@ -545,7 +612,12 @@ export const useStore = create<AppStore>()((set, get) => ({
             .filter((e) => e.fecha.startsWith(mesActual))
             .reduce((s, e) => s + (e.moneda === "USD" ? e.monto * tipoCambio : e.monto), 0);
 
-        const totalTotal = totalCompromisos + totalVariablePresupuestado;
+        // Depósitos a cuentas de ahorro este mes (en CRC)
+        const totalAhorros = cuentaAhorroAportes
+            .filter((a) => a.fecha.startsWith(mesActual))
+            .reduce((s, a) => s + a.monto, 0);
+
+        const totalTotal = totalCompromisos + totalVariablePresupuestado + totalAhorros;
         const porcentajeGastado = salarioMensual > 0
             ? Math.round((totalTotal / salarioMensual) * 100)
             : 0;
@@ -574,6 +646,6 @@ export const useStore = create<AppStore>()((set, get) => ({
             alertas.push(`Tu capacidad de ahorro es del ${capacidadAhorro}%. Se recomienda al menos el 10% del salario.`);
         }
 
-        return { salarioMensual, totalCompromisos, totalVariablePresupuestado, totalVariableGastado, porcentajeGastado, disponible, porCategoria, alertas, capacidadAhorro };
+        return { salarioMensual, totalCompromisos, totalVariablePresupuestado, totalVariableGastado, totalAhorros, porcentajeGastado, disponible, porCategoria, alertas, capacidadAhorro };
     },
 }));

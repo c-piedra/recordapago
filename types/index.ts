@@ -184,6 +184,38 @@ export interface MetaAporte {
     creadoEn?: any;
 }
 
+// ─── Cuentas de ahorro ────────────────────────────────────────────────────────
+export type TipoAhorro = "emergencia" | "caja_chica" | "libre" | "cdp" | "otro";
+
+export interface CuentaAhorro {
+    id: string;
+    nombre: string;
+    tipo: TipoAhorro;
+    saldo: number;              // saldo actual (o monto inicial para CDP)
+    moneda: Moneda;
+    icono?: string;
+    descripcion?: string;
+    // Objetivo (para ahorros regulares)
+    montoObjetivo?: number;     // cuánto quiero tener
+    fechaObjetivo?: string;     // YYYY-MM-DD — cuándo quiero llegar
+    // Solo CDPs
+    esCDP?: boolean;
+    tasaInteres?: number;       // % anual
+    fechaInicio?: string;       // YYYY-MM-DD
+    fechaVencimiento?: string;  // YYYY-MM-DD
+    creadoEn?: any;
+}
+
+export interface CuentaAhorroAporte {
+    id: string;
+    cuentaId: string;
+    cuentaNombre: string;
+    monto: number;
+    nota?: string;
+    fecha: string; // YYYY-MM-DD
+    creadoEn?: any;
+}
+
 export interface InvitacionCompartir {
     id: string;
     compromisoId: string;

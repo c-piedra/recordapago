@@ -7,13 +7,13 @@ import SaludFinancieraCard from "./dashboard/SaludFinancieraCard";
 import ResumenMesCard from "./dashboard/ResumenMesCard";
 import MetasResumenCard from "./dashboard/MetasResumenCard";
 import { fmt } from "@/lib/utils";
-import type { Compromiso, HistorialPago } from "@/types";
+import type { Compromiso, HistorialPago, CuentaAhorroAporte } from "@/types";
 
 type StatFilter = "proximos" | "vencidos" | "pagados" | null;
 
 export default function DashboardScreen() {
     const {
-        compromisos, historial, metas,
+        compromisos, historial, metas, cuentaAhorroAportes,
         getDashboardStats, getFinanzasStats,
         setActiveTab, setCategoriaAbierta,
         settings, userId, tipoCambio,
@@ -47,6 +47,7 @@ export default function DashboardScreen() {
 
     const mesActual = hoy.toISOString().slice(0, 7); // YYYY-MM
     const pagadosList = historial.filter((h) => h.fecha.startsWith(mesActual));
+    const ahorrosMes = cuentaAhorroAportes.filter((a) => a.fecha.startsWith(mesActual));
 
     const heroStats = [
         {
@@ -149,6 +150,7 @@ export default function DashboardScreen() {
                     proximos={proximosList}
                     vencidos={vencidosList}
                     pagados={pagadosList}
+                    ahorros={ahorrosMes}
                     onClose={() => setStatFilter(null)}
                     onIrACompromisos={() => { setStatFilter(null); setActiveTab("compromisos"); }}
                 />
@@ -159,12 +161,13 @@ export default function DashboardScreen() {
 
 // ─── Sheet de detalle de stat ──────────────────────────────────────────────────
 function StatSheet({
-    filter, proximos, vencidos, pagados, onClose, onIrACompromisos,
+    filter, proximos, vencidos, pagados, ahorros, onClose, onIrACompromisos,
 }: {
     filter: StatFilter;
     proximos: Compromiso[];
     vencidos: Compromiso[];
     pagados: HistorialPago[];
+    ahorros: CuentaAhorroAporte[];
     onClose: () => void;
     onIrACompromisos: () => void;
 }) {
@@ -211,28 +214,54 @@ function StatSheet({
                 {/* Lista */}
                 <div style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
                     {filter === "pagados" ? (
-                        pagados.length === 0 ? (
+                        pagados.length === 0 && ahorros.length === 0 ? (
                             <p style={{ textAlign: "center", color: "var(--color-text-3)", fontSize: "var(--text-sm)", padding: "var(--space-6) 0" }}>{config.empty}</p>
                         ) : (
-                            pagados.map((h) => (
-                                <div key={h.id} style={{
-                                    background: "var(--color-bg)",
-                                    borderRadius: "var(--radius-md)",
-                                    padding: "var(--space-3)",
-                                    display: "flex", justifyContent: "space-between", alignItems: "center",
-                                }}>
-                                    <div>
-                                        <p style={{ fontWeight: 600, fontSize: "var(--text-sm)", color: "var(--color-text)" }}>{h.compromisoNombre}</p>
-                                        <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)" }}>
-                                            {h.fecha}
-                                            {h.pagadoPorNombre ? ` · ${h.pagadoPorNombre}` : ""}
+                            <>
+                                {pagados.map((h) => (
+                                    <div key={h.id} style={{
+                                        background: "var(--color-bg)",
+                                        borderRadius: "var(--radius-md)",
+                                        padding: "var(--space-3)",
+                                        display: "flex", justifyContent: "space-between", alignItems: "center",
+                                    }}>
+                                        <div>
+                                            <p style={{ fontWeight: 600, fontSize: "var(--text-sm)", color: "var(--color-text)" }}>{h.compromisoNombre}</p>
+                                            <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)" }}>
+                                                {h.fecha}
+                                                {h.pagadoPorNombre ? ` · ${h.pagadoPorNombre}` : ""}
+                                            </p>
+                                        </div>
+                                        <p style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "var(--text-sm)", color: config.color }}>
+                                            {fmt(h.monto)}
                                         </p>
                                     </div>
-                                    <p style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "var(--text-sm)", color: config.color }}>
-                                        {fmt(h.monto)}
-                                    </p>
-                                </div>
-                            ))
+                                ))}
+                                {ahorros.map((a) => (
+                                    <div key={a.id} style={{
+                                        background: "var(--color-bg)",
+                                        borderRadius: "var(--radius-md)",
+                                        padding: "var(--space-3)",
+                                        display: "flex", justifyContent: "space-between", alignItems: "center",
+                                        borderLeft: "3px solid #22c55e",
+                                    }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+                                            <span style={{ fontSize: 18 }}>🐷</span>
+                                            <div>
+                                                <p style={{ fontWeight: 600, fontSize: "var(--text-sm)", color: "var(--color-text)" }}>
+                                                    {a.cuentaNombre}
+                                                </p>
+                                                <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)" }}>
+                                                    {a.fecha}{a.nota ? ` · ${a.nota}` : ""} · Ahorro
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <p style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "var(--text-sm)", color: "#22c55e" }}>
+                                            {fmt(a.monto)}
+                                        </p>
+                                    </div>
+                                ))}
+                            </>
                         )
                     ) : (
                         (() => {

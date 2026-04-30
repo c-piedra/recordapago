@@ -85,15 +85,19 @@ export default function FinanzasScreen() {
     };
 
     // Datos para gráficas
-    const distribucionData = Object.entries(stats.porCategoria).map(([cat, monto]) => ({
-        name: CATEGORIA_LABEL[cat as keyof typeof CATEGORIA_LABEL] ?? cat,
-        value: monto,
-    }));
+    const distribucionData = [
+        ...Object.entries(stats.porCategoria).map(([cat, monto]) => ({
+            name: CATEGORIA_LABEL[cat as keyof typeof CATEGORIA_LABEL] ?? cat,
+            value: monto,
+        })),
+        ...(stats.totalAhorros > 0 ? [{ name: "Ahorros", value: stats.totalAhorros }] : []),
+    ];
 
     const resumenData = [
         { name: "Salario", value: stats.salarioMensual, fill: "#6366f1" },
         { name: "Compromisos", value: stats.totalCompromisos, fill: "#ef4444" },
-        { name: "Disponible", value: Math.max(0, stats.disponible), fill: "#22c55e" },
+        ...(stats.totalAhorros > 0 ? [{ name: "Ahorros", value: stats.totalAhorros, fill: "#22c55e" }] : []),
+        { name: "Disponible", value: Math.max(0, stats.disponible), fill: stats.totalAhorros > 0 ? "#64748b" : "#22c55e" },
     ];
 
     const evolucionData = (() => {
@@ -181,6 +185,7 @@ export default function FinanzasScreen() {
             <GastosPorCategoria
                 porCategoria={stats.porCategoria}
                 salarioMensual={stats.salarioMensual}
+                totalAhorros={stats.totalAhorros}
             />
 
             <ConsejoIA

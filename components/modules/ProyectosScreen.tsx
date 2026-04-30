@@ -5,9 +5,9 @@ import { fmt } from "@/lib/utils";
 import { Sheet, ConfirmDialog } from "@/components/ui";
 import { Plus, Trash2 } from "lucide-react";
 import EmojiPicker from "./compromisos/EmojiPicker";
-import type { MetaProyecto, MetaAporte, Moneda } from "@/types";
+import type { MetaProyecto, MetaAporte, Moneda, CuentaAhorro, CuentaAhorroAporte, TipoAhorro } from "@/types";
 
-type ProyectosTab = "metas" | "prestamos";
+type ProyectosTab = "metas" | "ahorros" | "prestamos";
 
 export default function ProyectosScreen() {
     const [tab, setTab] = useState<ProyectosTab>("metas");
@@ -27,12 +27,15 @@ export default function ProyectosScreen() {
                 <button className={`tab-pill${tab === "metas" ? " active" : ""}`} onClick={() => setTab("metas")}>
                     🏆 Metas
                 </button>
+                <button className={`tab-pill${tab === "ahorros" ? " active" : ""}`} onClick={() => setTab("ahorros")}>
+                    🏦 Ahorros
+                </button>
                 <button className={`tab-pill${tab === "prestamos" ? " active" : ""}`} onClick={() => setTab("prestamos")}>
-                    🏦 Préstamos
+                    🧮 Préstamos
                 </button>
             </div>
 
-            {tab === "metas" ? <MetasTab /> : <PrestamosTab />}
+            {tab === "metas" ? <MetasTab /> : tab === "ahorros" ? <AhorrosTab /> : <PrestamosTab />}
         </div>
     );
 }
@@ -617,6 +620,625 @@ function MetaFormSheet({ onGuardar, onClose, ahorroDisponible, montoMetaAhorro }
                 Crear meta
             </button>
         </Sheet>
+    );
+}
+
+// ─── Tab Ahorros ─────────────────────────────────────────────────────────────
+const TIPO_AHORRO_CONFIG: Record<TipoAhorro, { label: string; icono: string; color: string }> = {
+    emergencia:  { label: "Fondo de emergencia", icono: "🛡️", color: "#ef4444" },
+    caja_chica:  { label: "Caja chica",          icono: "👛", color: "#f59e0b" },
+    libre:       { label: "Ahorro libre",         icono: "🐷", color: "#22c55e" },
+    cdp:         { label: "CDP / Depósito a plazo", icono: "🏦", color: "#6366f1" },
+    otro:        { label: "Otro",                  icono: "💰", color: "var(--color-primary)" },
+};
+
+function calcInteresesCDP(saldo: number, tasa: number, fechaInicio: string, fechaVencimiento: string) {
+    const inicio = new Date(fechaInicio);
+    const vencimiento = new Date(fechaVencimiento);
+    const hoy = new Date();
+    const diasTotal = Math.max(1, (vencimiento.getTime() - inicio.getTime()) / 86400000);
+    const diasTranscurridos = Math.max(0, Math.min(diasTotal, (hoy.getTime() - inicio.getTime()) / 86400000));
+    const interesTotal = saldo * (tasa / 100) * (diasTotal / 365);
+    const interesGanado = saldo * (tasa / 100) * (diasTranscurridos / 365);
+    const diasRestantes = Math.max(0, Math.ceil((vencimiento.getTime() - hoy.getTime()) / 86400000));
+    return { interesTotal, interesGanado, diasRestantes, diasTotal: Math.ceil(diasTotal), saldoAlVencimiento: saldo + interesTotal };
+}
+
+function CuentaAhorroCard({ cuenta, tipoCambio, aportes, onEdit, onDelete, onAddAporte, onDeleteAporte }: {
+    cuenta: CuentaAhorro;
+    tipoCambio: number;
+    aportes: CuentaAhorroAporte[];
+    onEdit: () => void;
+    onDelete: () => void;
+    onAddAporte: (monto: number, nota?: string) => void;
+    onDeleteAporte: (id: string, monto: number) => void;
+}) {
+    const [expandida, setExpandida] = useState(false);
+    const [showAporte, setShowAporte] = useState(false);
+    const [aporteInput, setAporteInput] = useState("");
+    const [aporteNota, setAporteNota] = useState("");
+    const [showHistorial, setShowHistorial] = useState(false);
+    const cfg = TIPO_AHORRO_CONFIG[cuenta.tipo];
+    const saldoCRC = cuenta.moneda === "USD" ? cuenta.saldo * tipoCambio : cuenta.saldo;
+
+    // CDP
+    const cdp = cuenta.esCDP && cuenta.tasaInteres && cuenta.fechaInicio && cuenta.fechaVencimiento
+        ? calcInteresesCDP(cuenta.saldo, cuenta.tasaInteres, cuenta.fechaInicio, cuenta.fechaVencimiento)
+        : null;
+    const vencido = cdp && cdp.diasRestantes === 0;
+
+    // Progreso hacia objetivo (para ahorros regulares)
+    const objetivoCRC = cuenta.montoObjetivo
+        ? (cuenta.moneda === "USD" ? cuenta.montoObjetivo * tipoCambio : cuenta.montoObjetivo)
+        : null;
+    const progresoPct = objetivoCRC ? Math.min(100, Math.round((saldoCRC / objetivoCRC) * 100)) : null;
+    const cumpleObjetivo = progresoPct !== null && progresoPct >= 100;
+
+    // Tiempo restante para fecha objetivo
+    const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+    const diasParaObjetivo = cuenta.fechaObjetivo
+        ? Math.ceil((new Date(cuenta.fechaObjetivo).getTime() - hoy.getTime()) / 86400000)
+        : null;
+
+    // Badge secundario en fila compacta
+    const badgeSecundario = cdp
+        ? (vencido ? "✅ Vencido" : `⏳ ${cdp.diasRestantes}d`)
+        : diasParaObjetivo !== null
+            ? (diasParaObjetivo < 0 ? "⚠️ Vencida" : diasParaObjetivo === 0 ? "📅 Hoy" : `📅 ${diasParaObjetivo}d`)
+            : progresoPct !== null
+                ? `${progresoPct}%`
+                : null;
+
+    return (
+        <div style={{ background: "var(--color-bg-elevated)", border: `1px solid ${expandida ? cfg.color : "var(--color-border)"}`, borderRadius: "var(--radius-lg)", overflow: "hidden", transition: "border-color 0.2s" }}>
+            {/* ── Fila compacta ── */}
+            <div onClick={() => setExpandida((v) => !v)} style={{ padding: "var(--space-3) var(--space-4)", cursor: "pointer", display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+                <span style={{ fontSize: 24, flexShrink: 0 }}>{cuenta.icono || cfg.icono}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 3 }}>
+                        <p style={{ fontWeight: 700, fontSize: "var(--text-sm)", color: "var(--color-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {cuenta.nombre}
+                        </p>
+                        <p style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "var(--text-sm)", color: cfg.color, flexShrink: 0, marginLeft: 8 }}>
+                            {cuenta.moneda === "USD" ? `$${cuenta.saldo.toLocaleString("es-CR")}` : fmt(cuenta.saldo)}
+                        </p>
+                    </div>
+                    {/* Barra de progreso si hay objetivo */}
+                    {progresoPct !== null && (
+                        <div style={{ height: 4, borderRadius: 2, background: "var(--color-bg)", overflow: "hidden", marginBottom: 4 }}>
+                            <div style={{ height: "100%", width: `${progresoPct}%`, background: cumpleObjetivo ? "#22c55e" : cfg.color, borderRadius: 2 }} />
+                        </div>
+                    )}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontSize: 10, background: cfg.color + "22", color: cfg.color, padding: "1px 6px", borderRadius: 99, fontWeight: 600 }}>
+                            {cfg.label}
+                        </span>
+                        {badgeSecundario && (
+                            <span style={{ fontSize: 10, color: (diasParaObjetivo !== null && diasParaObjetivo < 0) || vencido ? "#f59e0b" : "var(--color-text-3)" }}>
+                                {badgeSecundario}
+                            </span>
+                        )}
+                    </div>
+                </div>
+                <span style={{ fontSize: 11, color: "var(--color-text-3)", flexShrink: 0, display: "inline-block", transition: "transform 0.2s", transform: expandida ? "rotate(180deg)" : "none" }}>▼</span>
+            </div>
+
+            {/* ── Detalle expandido ── */}
+            {expandida && (
+                <div style={{ borderTop: "1px solid var(--color-border)", padding: "var(--space-3) var(--space-4)", display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+                    {cuenta.descripcion && (
+                        <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)", fontStyle: "italic" }}>{cuenta.descripcion}</p>
+                    )}
+
+                    {/* Saldo + equivalente USD */}
+                    <div style={{ background: "var(--color-bg)", borderRadius: "var(--radius-md)", padding: "var(--space-3)", textAlign: "center" }}>
+                        <p style={{ fontSize: 10, color: "var(--color-text-3)", marginBottom: 2 }}>Saldo actual</p>
+                        <p style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "var(--text-2xl)", color: cfg.color }}>
+                            {cuenta.moneda === "USD" ? `$${cuenta.saldo.toLocaleString("es-CR")}` : fmt(cuenta.saldo)}
+                        </p>
+                        {cuenta.moneda === "USD" && (
+                            <p style={{ fontSize: 10, color: "var(--color-text-3)", marginTop: 2 }}>≈ {fmt(Math.round(saldoCRC))}</p>
+                        )}
+                    </div>
+
+                    {/* Progreso hacia objetivo */}
+                    {objetivoCRC && (
+                        <div style={{ background: "var(--color-bg)", borderRadius: "var(--radius-md)", padding: "var(--space-3)" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                                <span style={{ fontSize: 11, color: "var(--color-text-3)" }}>Progreso</span>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: cumpleObjetivo ? "#22c55e" : cfg.color }}>
+                                    {cumpleObjetivo ? "🎉 ¡Meta alcanzada!" : `${progresoPct}% · faltan ${fmt(Math.round(objetivoCRC - saldoCRC))}`}
+                                </span>
+                            </div>
+                            <div style={{ height: 8, borderRadius: 4, background: "var(--color-bg-elevated)", overflow: "hidden" }}>
+                                <div style={{ height: "100%", width: `${progresoPct}%`, background: cumpleObjetivo ? "#22c55e" : cfg.color, borderRadius: 4, transition: "width 0.4s" }} />
+                            </div>
+                            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+                                <span style={{ fontSize: 10, color: "var(--color-text-3)" }}>₡0</span>
+                                <span style={{ fontSize: 10, color: "var(--color-text-3)" }}>
+                                    Objetivo: {cuenta.moneda === "USD" ? `$${cuenta.montoObjetivo?.toLocaleString("es-CR")}` : fmt(cuenta.montoObjetivo!)}
+                                </span>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Fecha objetivo */}
+                    {cuenta.fechaObjetivo && (
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-2)", background: "var(--color-bg)", borderRadius: "var(--radius-md)", padding: "var(--space-3)" }}>
+                            <div>
+                                <p style={{ fontSize: 10, color: "var(--color-text-3)", marginBottom: 2 }}>Fecha objetivo</p>
+                                <p style={{ fontWeight: 700, fontSize: "var(--text-sm)", color: "var(--color-text)" }}>
+                                    {new Date(cuenta.fechaObjetivo + "T00:00:00").toLocaleDateString("es-CR", { day: "numeric", month: "short", year: "numeric" })}
+                                </p>
+                            </div>
+                            <div>
+                                <p style={{ fontSize: 10, color: "var(--color-text-3)", marginBottom: 2 }}>Tiempo restante</p>
+                                <p style={{ fontWeight: 700, fontSize: "var(--text-sm)", color: diasParaObjetivo !== null && diasParaObjetivo < 0 ? "#ef4444" : diasParaObjetivo !== null && diasParaObjetivo <= 30 ? "#f59e0b" : "#22c55e" }}>
+                                    {diasParaObjetivo === null ? "—"
+                                        : diasParaObjetivo < 0 ? `Venció hace ${Math.abs(diasParaObjetivo)}d`
+                                        : diasParaObjetivo === 0 ? "¡Hoy!"
+                                        : diasParaObjetivo < 30 ? `${diasParaObjetivo} días`
+                                        : `${Math.round(diasParaObjetivo / 30)} meses`}
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* CDP detalle */}
+                    {cdp && (
+                        <div style={{ background: "var(--color-bg)", borderRadius: "var(--radius-md)", padding: "var(--space-3)", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-2)" }}>
+                            <div>
+                                <p style={{ fontSize: 10, color: "var(--color-text-3)", marginBottom: 2 }}>Tasa anual</p>
+                                <p style={{ fontWeight: 700, fontSize: "var(--text-sm)", color: cfg.color }}>{cuenta.tasaInteres}%</p>
+                            </div>
+                            <div>
+                                <p style={{ fontSize: 10, color: "var(--color-text-3)", marginBottom: 2 }}>Días restantes</p>
+                                <p style={{ fontWeight: 700, fontSize: "var(--text-sm)", color: vencido ? "#22c55e" : cdp.diasRestantes <= 30 ? "#f59e0b" : "var(--color-text)" }}>
+                                    {vencido ? "Vencido ✅" : `${cdp.diasRestantes} días`}
+                                </p>
+                            </div>
+                            <div>
+                                <p style={{ fontSize: 10, color: "var(--color-text-3)", marginBottom: 2 }}>Interés ganado</p>
+                                <p style={{ fontWeight: 700, fontSize: "var(--text-sm)", color: "#22c55e" }}>
+                                    +{cuenta.moneda === "USD" ? `$${cdp.interesGanado.toFixed(2)}` : fmt(Math.round(cdp.interesGanado))}
+                                </p>
+                            </div>
+                            <div>
+                                <p style={{ fontSize: 10, color: "var(--color-text-3)", marginBottom: 2 }}>Total al vencimiento</p>
+                                <p style={{ fontWeight: 700, fontSize: "var(--text-sm)", color: "var(--color-text)" }}>
+                                    {cuenta.moneda === "USD" ? `$${cdp.saldoAlVencimiento.toFixed(2)}` : fmt(Math.round(cdp.saldoAlVencimiento))}
+                                </p>
+                            </div>
+                            <div style={{ gridColumn: "1 / -1" }}>
+                                <p style={{ fontSize: 10, color: "var(--color-text-3)", marginBottom: 4 }}>Progreso del plazo</p>
+                                <div style={{ height: 6, borderRadius: 3, background: "var(--color-bg-elevated)", overflow: "hidden" }}>
+                                    <div style={{ height: "100%", width: `${Math.min(100, Math.round(((cdp.diasTotal - cdp.diasRestantes) / cdp.diasTotal) * 100))}%`, background: cfg.color, borderRadius: 3 }} />
+                                </div>
+                                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 3 }}>
+                                    <span style={{ fontSize: 9, color: "var(--color-text-3)" }}>{cuenta.fechaInicio}</span>
+                                    <span style={{ fontSize: 9, color: "var(--color-text-3)" }}>{cuenta.fechaVencimiento}</span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── Depositar fondos ── */}
+                    <div style={{ display: "flex", gap: "var(--space-2)" }}>
+                        <button
+                            className="btn btn-primary"
+                            style={{ flex: 1, fontSize: "var(--text-xs)", minHeight: 34 }}
+                            onClick={() => setShowAporte((v) => !v)}
+                        >
+                            💰 Depositar fondos
+                        </button>
+                        {aportes.length > 0 && (
+                            <button
+                                className="btn btn-ghost"
+                                style={{ fontSize: "var(--text-xs)", minHeight: 34, padding: "0 var(--space-3)" }}
+                                onClick={() => setShowHistorial((v) => !v)}
+                            >
+                                {showHistorial ? "Ocultar" : `${aportes.length} depósito${aportes.length > 1 ? "s" : ""}`}
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Formulario de depósito */}
+                    {showAporte && (
+                        <div style={{ background: "var(--color-bg)", borderRadius: "var(--radius-md)", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+                            <p style={{ fontSize: 11, color: "var(--color-text-3)", marginBottom: 2 }}>
+                                Saldo actual: <strong style={{ color: cfg.color }}>{cuenta.moneda === "USD" ? `$${cuenta.saldo.toLocaleString("es-CR")}` : fmt(cuenta.saldo)}</strong>
+                            </p>
+                            <div style={{ display: "flex", gap: "var(--space-2)", alignItems: "center" }}>
+                                <span style={{ fontSize: "var(--text-sm)", color: "var(--color-text-3)", fontWeight: 600 }}>
+                                    {cuenta.moneda === "USD" ? "$" : "₡"}
+                                </span>
+                                <input
+                                    className="input"
+                                    type="number"
+                                    value={aporteInput}
+                                    placeholder="Monto a depositar"
+                                    style={{ flex: 1, minHeight: 36 }}
+                                    autoFocus
+                                    onChange={(e) => setAporteInput(e.target.value)}
+                                />
+                            </div>
+                            <input
+                                className="input"
+                                value={aporteNota}
+                                placeholder="Nota opcional (ej: quincena abril)"
+                                style={{ minHeight: 36 }}
+                                onChange={(e) => setAporteNota(e.target.value)}
+                            />
+                            <div style={{ display: "flex", gap: "var(--space-2)" }}>
+                                <button
+                                    className="btn btn-primary"
+                                    style={{ flex: 1, fontSize: "var(--text-xs)", minHeight: 34 }}
+                                    onClick={() => {
+                                        const val = parseFloat(aporteInput);
+                                        if (!val || val <= 0) return;
+                                        onAddAporte(val, aporteNota || undefined);
+                                        setAporteInput(""); setAporteNota(""); setShowAporte(false);
+                                    }}
+                                >
+                                    Guardar
+                                </button>
+                                <button className="btn btn-ghost" style={{ flex: 1, fontSize: "var(--text-xs)", minHeight: 34 }} onClick={() => setShowAporte(false)}>
+                                    Cancelar
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Historial de depósitos */}
+                    {showHistorial && aportes.length > 0 && (
+                        <div style={{ background: "var(--color-bg)", borderRadius: "var(--radius-md)", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-1)" }}>
+                            {aportes.map((a) => (
+                                <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "var(--space-1) 0", borderBottom: "1px solid var(--color-border)" }}>
+                                    <div>
+                                        <p style={{ fontSize: "var(--text-xs)", fontWeight: 600, color: "#22c55e" }}>
+                                            +{cuenta.moneda === "USD" ? `$${a.monto.toLocaleString("es-CR")}` : fmt(a.monto)}
+                                        </p>
+                                        <p style={{ fontSize: 10, color: "var(--color-text-3)" }}>
+                                            {a.fecha}{a.nota ? ` · ${a.nota}` : ""}
+                                        </p>
+                                    </div>
+                                    <button onClick={() => onDeleteAporte(a.id, a.monto)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-3)", padding: 4 }}>
+                                        <Trash2 size={13} />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Acciones */}
+                    <div style={{ display: "flex", gap: "var(--space-2)" }}>
+                        <button className="btn btn-ghost" style={{ flex: 1, fontSize: "var(--text-xs)", minHeight: 34 }} onClick={onEdit}>
+                            ✏️ Editar
+                        </button>
+                        <button onClick={onDelete} style={{ background: "none", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", cursor: "pointer", color: "var(--color-danger)", padding: "0 12px", minHeight: 34 }}>
+                            <Trash2 size={14} />
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function CuentaAhorroForm({ initial, onGuardar, onClose }: {
+    initial?: Partial<CuentaAhorro>;
+    onGuardar: (data: Omit<CuentaAhorro, "id">) => void;
+    onClose: () => void;
+}) {
+    const [nombre, setNombre] = useState(initial?.nombre ?? "");
+    const [tipo, setTipo] = useState<TipoAhorro>(initial?.tipo ?? "libre");
+    const [saldo, setSaldo] = useState(String(initial?.saldo ?? ""));
+    const [moneda, setMoneda] = useState<Moneda>(initial?.moneda ?? "CRC");
+    const [descripcion, setDescripcion] = useState(initial?.descripcion ?? "");
+    const [montoObjetivo, setMontoObjetivo] = useState(String(initial?.montoObjetivo ?? ""));
+    const [fechaObjetivo, setFechaObjetivo] = useState(initial?.fechaObjetivo ?? "");
+    const [esCDP, setEsCDP] = useState(initial?.esCDP ?? false);
+    const [tasa, setTasa] = useState(String(initial?.tasaInteres ?? ""));
+    const [fechaInicio, setFechaInicio] = useState(initial?.fechaInicio ?? new Date().toISOString().split("T")[0]);
+    const [fechaVencimiento, setFechaVencimiento] = useState(initial?.fechaVencimiento ?? "");
+    const [error, setError] = useState("");
+
+    const tipoEfectivo: TipoAhorro = esCDP ? "cdp" : tipo === "cdp" ? "libre" : tipo;
+    const cfg = TIPO_AHORRO_CONFIG[tipoEfectivo];
+    const saldoVal = parseFloat(saldo) || 0;
+    const tasaVal = parseFloat(tasa) || 0;
+    const montoObjetivoVal = parseFloat(montoObjetivo) || 0;
+
+    const cdpPreview = esCDP && saldoVal > 0 && tasaVal > 0 && fechaInicio && fechaVencimiento
+        ? calcInteresesCDP(saldoVal, tasaVal, fechaInicio, fechaVencimiento)
+        : null;
+
+    // Preview días para fecha objetivo
+    const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+    const diasObjetivo = fechaObjetivo
+        ? Math.ceil((new Date(fechaObjetivo + "T00:00:00").getTime() - hoy.getTime()) / 86400000)
+        : null;
+
+    const handleGuardar = () => {
+        if (!nombre.trim()) { setError("Poné un nombre"); return; }
+        if (!saldoVal || saldoVal <= 0) { setError("El saldo debe ser mayor a cero"); return; }
+        if (esCDP && (!tasaVal || !fechaVencimiento)) { setError("Los CDPs necesitan tasa y fecha de vencimiento"); return; }
+        onGuardar({
+            nombre: nombre.trim(),
+            tipo: tipoEfectivo,
+            saldo: saldoVal,
+            moneda,
+            icono: initial?.icono || cfg.icono,
+            descripcion: descripcion.trim() || undefined,
+            montoObjetivo: !esCDP && montoObjetivoVal > 0 ? montoObjetivoVal : undefined,
+            fechaObjetivo: !esCDP && fechaObjetivo ? fechaObjetivo : undefined,
+            esCDP: esCDP || undefined,
+            tasaInteres: esCDP ? tasaVal : undefined,
+            fechaInicio: esCDP ? fechaInicio : undefined,
+            fechaVencimiento: esCDP ? fechaVencimiento : undefined,
+        });
+    };
+
+    return (
+        <Sheet title={initial?.id ? "Editar cuenta" : "Nueva cuenta de ahorro"} onClose={onClose}>
+            {/* Tipo */}
+            <div className="input-group">
+                <label className="input-label">Tipo de ahorro</label>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}>
+                    {(Object.entries(TIPO_AHORRO_CONFIG) as [TipoAhorro, typeof TIPO_AHORRO_CONFIG[TipoAhorro]][])
+                        .filter(([k]) => k !== "cdp")
+                        .map(([val, c]) => (
+                            <button key={val}
+                                className={`btn ${tipoEfectivo === val && !esCDP ? "btn-primary" : "btn-secondary"}`}
+                                style={{ fontSize: 12, minHeight: 36, padding: "0 var(--space-3)" }}
+                                onClick={() => { setTipo(val); setEsCDP(false); }}
+                            >
+                                {c.icono} {c.label}
+                            </button>
+                        ))}
+                    <button
+                        className={`btn ${esCDP ? "btn-primary" : "btn-secondary"}`}
+                        style={{ fontSize: 12, minHeight: 36, padding: "0 var(--space-3)" }}
+                        onClick={() => setEsCDP((v) => !v)}
+                    >
+                        🏦 CDP / Depósito a plazo
+                    </button>
+                </div>
+            </div>
+
+            {/* Nombre */}
+            <div className="input-group">
+                <label className="input-label">Nombre *</label>
+                <input className="input" value={nombre} onChange={(e) => { setNombre(e.target.value); setError(""); }}
+                    placeholder={`Ej: ${cfg.label}`} />
+            </div>
+
+            {/* Moneda + Saldo */}
+            <div className="input-group">
+                <label className="input-label">{esCDP ? "Monto inicial *" : "Saldo actual *"}</label>
+                <div style={{ display: "flex", gap: "var(--space-2)", marginBottom: "var(--space-2)" }}>
+                    {(["CRC", "USD"] as Moneda[]).map((m) => (
+                        <button key={m} className={`btn ${moneda === m ? "btn-primary" : "btn-secondary"}`}
+                            style={{ flex: 1, fontSize: "var(--text-xs)", minHeight: 36 }}
+                            onClick={() => setMoneda(m)}>
+                            {m === "CRC" ? "₡ Colones" : "$ Dólares"}
+                        </button>
+                    ))}
+                </div>
+                <div style={{ position: "relative" }}>
+                    <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: "var(--text-sm)", color: "var(--color-text-3)", fontWeight: 600 }}>
+                        {moneda === "USD" ? "$" : "₡"}
+                    </span>
+                    <input className="input" type="number" value={saldo}
+                        onChange={(e) => { setSaldo(e.target.value); setError(""); }}
+                        placeholder="0" style={{ paddingLeft: 28 }} />
+                </div>
+            </div>
+
+            {/* CDP: tasa + fechas */}
+            {esCDP ? (
+                <>
+                    <div className="input-group">
+                        <label className="input-label">Tasa de interés anual (%)</label>
+                        <div style={{ position: "relative" }}>
+                            <input className="input" type="number" value={tasa}
+                                onChange={(e) => { setTasa(e.target.value); setError(""); }}
+                                placeholder="Ej: 6.5" style={{ paddingRight: 36 }} />
+                            <span style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", fontSize: "var(--text-sm)", color: "var(--color-text-3)", fontWeight: 600 }}>%</span>
+                        </div>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-2)" }}>
+                        <div className="input-group" style={{ marginBottom: 0 }}>
+                            <label className="input-label">Fecha de inicio</label>
+                            <input className="input" type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} />
+                        </div>
+                        <div className="input-group" style={{ marginBottom: 0 }}>
+                            <label className="input-label">Vencimiento *</label>
+                            <input className="input" type="date" value={fechaVencimiento}
+                                onChange={(e) => { setFechaVencimiento(e.target.value); setError(""); }} />
+                        </div>
+                    </div>
+                    {cdpPreview && (
+                        <div style={{ background: "var(--color-bg)", border: "1px solid #6366f1", borderRadius: "var(--radius-md)", padding: "var(--space-3)", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-2)" }}>
+                            <div style={{ textAlign: "center" }}>
+                                <p style={{ fontSize: 10, color: "var(--color-text-3)", marginBottom: 2 }}>Interés total</p>
+                                <p style={{ fontWeight: 700, color: "#22c55e", fontSize: "var(--text-sm)" }}>
+                                    +{moneda === "USD" ? `$${cdpPreview.interesTotal.toFixed(2)}` : fmt(Math.round(cdpPreview.interesTotal))}
+                                </p>
+                            </div>
+                            <div style={{ textAlign: "center" }}>
+                                <p style={{ fontSize: 10, color: "var(--color-text-3)", marginBottom: 2 }}>Total al vencer</p>
+                                <p style={{ fontWeight: 700, color: "var(--color-primary)", fontSize: "var(--text-sm)" }}>
+                                    {moneda === "USD" ? `$${cdpPreview.saldoAlVencimiento.toFixed(2)}` : fmt(Math.round(cdpPreview.saldoAlVencimiento))}
+                                </p>
+                            </div>
+                            <div style={{ gridColumn: "1 / -1", textAlign: "center" }}>
+                                <p style={{ fontSize: 10, color: "var(--color-text-3)" }}>
+                                    {cdpPreview.diasTotal} días totales · {cdpPreview.diasRestantes} restantes
+                                </p>
+                            </div>
+                        </div>
+                    )}
+                </>
+            ) : (
+                /* Campos opcionales para ahorros regulares */
+                <>
+                    <div className="input-group">
+                        <label className="input-label">Monto objetivo (opcional)</label>
+                        <p style={{ fontSize: 11, color: "var(--color-text-3)", marginBottom: "var(--space-2)" }}>
+                            ¿A cuánto querés llegar? La app te muestra el progreso.
+                        </p>
+                        <div style={{ position: "relative" }}>
+                            <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: "var(--text-sm)", color: "var(--color-text-3)", fontWeight: 600 }}>
+                                {moneda === "USD" ? "$" : "₡"}
+                            </span>
+                            <input className="input" type="number" value={montoObjetivo}
+                                onChange={(e) => setMontoObjetivo(e.target.value)}
+                                placeholder="Ej: 1 000 000" style={{ paddingLeft: 28 }} />
+                        </div>
+                    </div>
+
+                    <div className="input-group">
+                        <label className="input-label">Fecha objetivo (opcional)</label>
+                        <p style={{ fontSize: 11, color: "var(--color-text-3)", marginBottom: "var(--space-2)" }}>
+                            ¿Cuándo querés tener ese monto?
+                        </p>
+                        <input className="input" type="date" value={fechaObjetivo}
+                            onChange={(e) => setFechaObjetivo(e.target.value)} />
+                        {diasObjetivo !== null && (
+                            <p style={{ fontSize: 11, color: diasObjetivo < 0 ? "#ef4444" : diasObjetivo <= 30 ? "#f59e0b" : "#22c55e", marginTop: 4 }}>
+                                {diasObjetivo < 0 ? `⚠️ Fecha pasada` : diasObjetivo === 0 ? "📅 ¡Hoy!" : `📅 En ${diasObjetivo} días (${Math.round(diasObjetivo / 30)} meses)`}
+                            </p>
+                        )}
+                    </div>
+                </>
+            )}
+
+            <div className="input-group">
+                <label className="input-label">Descripción (opcional)</label>
+                <input className="input" value={descripcion} onChange={(e) => setDescripcion(e.target.value)}
+                    placeholder="Ej: BAC, para emergencias médicas..." />
+            </div>
+
+            {error && <p style={{ fontSize: 12, color: "var(--color-danger)", marginBottom: "var(--space-2)" }}>{error}</p>}
+
+            <button className="btn btn-primary" style={{ width: "100%" }} onClick={handleGuardar}>
+                {initial?.id ? "Guardar cambios" : "Crear cuenta"}
+            </button>
+        </Sheet>
+    );
+}
+
+function AhorrosTab() {
+    const { cuentasAhorro, cuentaAhorroAportes, addCuentaAhorro, updateCuentaAhorro, deleteCuentaAhorro, addCuentaAhorroAporte, deleteCuentaAhorroAporte, tipoCambio } = useStore();
+    const [showForm, setShowForm] = useState(false);
+    const [editingCuenta, setEditingCuenta] = useState<CuentaAhorro | null>(null);
+    const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+
+    // Totales por moneda
+    const totalCRC = cuentasAhorro.filter((c) => c.moneda === "CRC").reduce((s, c) => s + c.saldo, 0);
+    const totalUSD = cuentasAhorro.filter((c) => c.moneda === "USD").reduce((s, c) => s + c.saldo, 0);
+    const totalEnCRC = totalCRC + totalUSD * tipoCambio;
+
+    const cdps = cuentasAhorro.filter((c) => c.esCDP);
+    const regulares = cuentasAhorro.filter((c) => !c.esCDP);
+
+    return (
+        <>
+            {/* Resumen */}
+            <div style={{ background: "var(--color-bg-elevated)", borderRadius: "var(--radius-lg)", padding: "var(--space-3) var(--space-4)", marginBottom: "var(--space-3)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                    <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)" }}>Total ahorrado</p>
+                    <p style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "var(--text-xl)", color: "var(--color-success)" }}>
+                        {fmt(Math.round(totalEnCRC))}
+                    </p>
+                    {totalUSD > 0 && (
+                        <p style={{ fontSize: 10, color: "var(--color-text-3)" }}>
+                            {fmt(totalCRC)} + ${totalUSD.toLocaleString("es-CR")}
+                        </p>
+                    )}
+                </div>
+                <button
+                    className="btn btn-secondary"
+                    style={{ minHeight: 36, fontSize: "var(--text-xs)", padding: "0 var(--space-3)", display: "flex", alignItems: "center", gap: 4 }}
+                    onClick={() => setShowForm(true)}
+                >
+                    <Plus size={14} /> Nueva cuenta
+                </button>
+            </div>
+
+            {cuentasAhorro.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "var(--space-8) var(--space-4)" }}>
+                    <p style={{ fontSize: 48, marginBottom: "var(--space-3)" }}>🏦</p>
+                    <p style={{ fontWeight: 700, color: "var(--color-text)", marginBottom: "var(--space-1)" }}>Sin cuentas de ahorro</p>
+                    <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-3)" }}>
+                        Registrá tu fondo de emergencia, caja chica, CDPs y más para tener todo en un solo lugar.
+                    </p>
+                </div>
+            ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+                    {/* Ahorros regulares */}
+                    {regulares.length > 0 && (
+                        <div>
+                            <p style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-text-3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "var(--space-2)" }}>
+                                Ahorros
+                            </p>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+                                {regulares.map((c) => (
+                                    <CuentaAhorroCard key={c.id} cuenta={c} tipoCambio={tipoCambio}
+                                        aportes={cuentaAhorroAportes.filter((a) => a.cuentaId === c.id)}
+                                        onEdit={() => { setEditingCuenta(c); setShowForm(false); }}
+                                        onDelete={() => setConfirmDelete(c.id)}
+                                        onAddAporte={(monto, nota) => addCuentaAhorroAporte({ cuentaId: c.id, cuentaNombre: c.nombre, monto, nota, fecha: new Date().toISOString().split("T")[0] })}
+                                        onDeleteAporte={(id, monto) => deleteCuentaAhorroAporte(id, c.id, monto)}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    {/* CDPs */}
+                    {cdps.length > 0 && (
+                        <div>
+                            <p style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-text-3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "var(--space-2)" }}>
+                                Certificados de depósito (CDPs)
+                            </p>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+                                {cdps.map((c) => (
+                                    <CuentaAhorroCard key={c.id} cuenta={c} tipoCambio={tipoCambio}
+                                        aportes={cuentaAhorroAportes.filter((a) => a.cuentaId === c.id)}
+                                        onEdit={() => { setEditingCuenta(c); setShowForm(false); }}
+                                        onDelete={() => setConfirmDelete(c.id)}
+                                        onAddAporte={(monto, nota) => addCuentaAhorroAporte({ cuentaId: c.id, cuentaNombre: c.nombre, monto, nota, fecha: new Date().toISOString().split("T")[0] })}
+                                        onDeleteAporte={(id, monto) => deleteCuentaAhorroAporte(id, c.id, monto)}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {showForm && (
+                <CuentaAhorroForm
+                    onGuardar={(data) => { addCuentaAhorro(data); setShowForm(false); }}
+                    onClose={() => setShowForm(false)}
+                />
+            )}
+            {editingCuenta && (
+                <CuentaAhorroForm
+                    initial={editingCuenta}
+                    onGuardar={(data) => { updateCuentaAhorro(editingCuenta.id, data); setEditingCuenta(null); }}
+                    onClose={() => setEditingCuenta(null)}
+                />
+            )}
+            {confirmDelete && (
+                <ConfirmDialog
+                    message="¿Eliminar esta cuenta? Esta acción no se puede deshacer."
+                    onConfirm={() => { deleteCuentaAhorro(confirmDelete); setConfirmDelete(null); }}
+                    onCancel={() => setConfirmDelete(null)}
+                />
+            )}
+        </>
     );
 }
 

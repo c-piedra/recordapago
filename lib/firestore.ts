@@ -3,7 +3,7 @@ import {
     getDocs, onSnapshot, query, orderBy, serverTimestamp, where,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import type { Compromiso, HistorialPago, AppSettings, Space, GastoVariable, GastoVariableEntrada, InvitacionCompartir, MetaProyecto, MetaAporte } from "@/types";
+import type { Compromiso, HistorialPago, AppSettings, Space, GastoVariable, GastoVariableEntrada, InvitacionCompartir, MetaProyecto, MetaAporte, CuentaAhorro, CuentaAhorroAporte } from "@/types";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const cleanData = (data: object) =>
@@ -228,6 +228,43 @@ export const metaAportesService = {
         return onSnapshot(
             query(spaceCol(spaceId, "metaAportes"), orderBy("fecha", "desc")),
             (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as MetaAporte)))
+        );
+    },
+};
+
+// ─── Cuentas de ahorro ───────────────────────────────────────────────────────
+export const cuentasAhorroService = {
+    async add(spaceId: string, c: Omit<CuentaAhorro, "id">): Promise<string> {
+        const ref = await addDoc(spaceCol(spaceId, "cuentasAhorro"), cleanData({ ...c, creadoEn: serverTimestamp() }));
+        return ref.id;
+    },
+    async update(spaceId: string, id: string, data: Partial<CuentaAhorro>): Promise<void> {
+        await updateDoc(spaceDoc(spaceId, "cuentasAhorro", id), cleanData(data));
+    },
+    async delete(spaceId: string, id: string): Promise<void> {
+        await deleteDoc(spaceDoc(spaceId, "cuentasAhorro", id));
+    },
+    subscribe(spaceId: string, callback: (items: CuentaAhorro[]) => void) {
+        return onSnapshot(
+            query(spaceCol(spaceId, "cuentasAhorro"), orderBy("creadoEn", "asc")),
+            (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as CuentaAhorro)))
+        );
+    },
+};
+
+// ─── Aportes a cuentas de ahorro ─────────────────────────────────────────────
+export const cuentaAhorroAportesService = {
+    async add(spaceId: string, a: Omit<CuentaAhorroAporte, "id">): Promise<string> {
+        const ref = await addDoc(spaceCol(spaceId, "cuentaAhorroAportes"), cleanData({ ...a, creadoEn: serverTimestamp() }));
+        return ref.id;
+    },
+    async delete(spaceId: string, id: string): Promise<void> {
+        await deleteDoc(spaceDoc(spaceId, "cuentaAhorroAportes", id));
+    },
+    subscribe(spaceId: string, callback: (aportes: CuentaAhorroAporte[]) => void) {
+        return onSnapshot(
+            query(spaceCol(spaceId, "cuentaAhorroAportes"), orderBy("fecha", "desc")),
+            (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as CuentaAhorroAporte)))
         );
     },
 };

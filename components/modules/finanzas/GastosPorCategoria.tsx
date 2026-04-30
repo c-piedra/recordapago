@@ -7,9 +7,10 @@ const VISIBLE_DEFAULT = 2;
 interface GastosPorCategoriaProps {
     porCategoria: Record<string, number>;
     salarioMensual: number;
+    totalAhorros?: number;
 }
 
-export default function GastosPorCategoria({ porCategoria, salarioMensual }: GastosPorCategoriaProps) {
+export default function GastosPorCategoria({ porCategoria, salarioMensual, totalAhorros = 0 }: GastosPorCategoriaProps) {
     const [expandido, setExpandido] = useState(false);
 
     const sorted = Object.entries(porCategoria).sort(([, a], [, b]) => b - a);
@@ -17,7 +18,9 @@ export default function GastosPorCategoria({ porCategoria, salarioMensual }: Gas
     const hayMas = sorted.length > VISIBLE_DEFAULT;
     const ocultos = sorted.length - VISIBLE_DEFAULT;
 
-    if (sorted.length === 0) return null;
+    if (sorted.length === 0 && totalAhorros === 0) return null;
+
+    const pctAhorros = salarioMensual > 0 ? Math.round((totalAhorros / salarioMensual) * 100) : 0;
 
     return (
         <div>
@@ -27,6 +30,35 @@ export default function GastosPorCategoria({ porCategoria, salarioMensual }: Gas
             </p>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+                {/* Fila especial: Ahorros este mes */}
+                {totalAhorros > 0 && (
+                    <div className="list-item" style={{ borderLeft: "3px solid #22c55e" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-2)" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+                                <span style={{ fontSize: 20 }}>🐷</span>
+                                <div>
+                                    <p style={{ fontSize: "var(--text-sm)", fontWeight: 600, color: "var(--color-text)" }}>
+                                        Ahorros este mes
+                                    </p>
+                                    <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)" }}>
+                                        {pctAhorros}% de tu salario
+                                    </p>
+                                </div>
+                            </div>
+                            <p style={{ fontFamily: "var(--font-display)", fontWeight: 700, color: "#22c55e", fontSize: "var(--text-sm)" }}>
+                                {fmt(totalAhorros)}
+                            </p>
+                        </div>
+                        <div style={{ height: 6, borderRadius: 3, background: "var(--color-bg-elevated)", overflow: "hidden" }}>
+                            <div style={{
+                                height: "100%", width: `${Math.min(100, pctAhorros)}%`,
+                                background: "#22c55e", borderRadius: 3,
+                                transition: "width 0.4s ease",
+                            }} />
+                        </div>
+                    </div>
+                )}
+
                 {visible.map(([cat, monto]) => {
                     const pct = salarioMensual > 0 ? Math.round((monto / salarioMensual) * 100) : 0;
                     const color = pct > 30 ? "var(--color-danger)" : pct > 15 ? "var(--color-warning)" : "var(--color-primary)";
