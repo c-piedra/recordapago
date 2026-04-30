@@ -106,13 +106,27 @@ export interface Compromiso {
 export type FrecuenciaSalario = "semanal" | "quincenal" | "mensual";
 export type Moneda = "CRC" | "USD";
 
+export interface FuenteIngreso {
+    id: string;
+    nombre: string;
+    monto: number;
+    frecuencia: FrecuenciaSalario;
+    moneda: Moneda;
+    mensualCRC: number;   // calculado al guardar
+    icono?: string;
+}
+
 export interface PerfilFinanciero {
+    // Legacy (primer salario / compatibilidad hacia atrás)
     salario: number;
     frecuenciaSalario: FrecuenciaSalario;
-    monedaSalario: Moneda;        // ₡ o $
-    salarioMensual: number;       // siempre en CRC (calculado con tipo de cambio del momento)
-    meta?: number;                // % máximo a gastar en compromisos
-    metaAhorro?: number;          // % del salario que el usuario quiere ahorrar
+    monedaSalario: Moneda;
+    // Total mensual en CRC = suma de todas las fuentes
+    salarioMensual: number;
+    // Múltiples fuentes de ingreso
+    fuentes?: FuenteIngreso[];
+    meta?: number;        // % máximo a gastar en compromisos
+    metaAhorro?: number;  // % del salario que el usuario quiere ahorrar
 }
 
 export interface AppSettings {

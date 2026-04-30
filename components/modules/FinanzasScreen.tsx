@@ -9,12 +9,13 @@ import AlertasFinancieras from "./finanzas/AlertasFinancieras";
 import GraficasSection from "./finanzas/GraficasSection";
 import GastosPorCategoria from "./finanzas/GastosPorCategoria";
 import AhorroCard from "./finanzas/AhorroCard";
+import FuentesIngresoSection from "./finanzas/FuentesIngresoSection";
 import ConsejoIA from "./finanzas/ConsejoIA";
 
 type ChartTab = "distribucion" | "resumen" | "evolucion";
 
 export default function FinanzasScreen() {
-    const { settings, updatePerfil, compromisos, historial, getFinanzasStats, tipoCambio, fetchTipoCambio } = useStore();
+    const { settings, updatePerfil, addFuenteIngreso, updateFuenteIngreso, deleteFuenteIngreso, compromisos, historial, getFinanzasStats, tipoCambio, fetchTipoCambio } = useStore();
     const perfil = settings.perfil;
     const stats = getFinanzasStats();
 
@@ -43,11 +44,13 @@ export default function FinanzasScreen() {
     const handleGuardarPerfil = () => {
         if (!salarioInput) return;
         const salario = parseFloat(salarioInput);
-        // salarioMensual siempre en CRC con el tipo de cambio actual
         const base = monedaSalario === "USD" ? salario * tipoCambio : salario;
         const salarioMensual = frecuencia === "quincenal" ? base * 2 : frecuencia === "semanal" ? base * 4.33 : base;
-        // Preservar metaAhorro si ya existía
-        updatePerfil({ salario, frecuenciaSalario: frecuencia, monedaSalario, salarioMensual, metaAhorro: perfil?.metaAhorro });
+        // Si es la primera vez (no hay fuentes), crear la fuente inicial
+        const primeraFuente = (!perfil?.fuentes || perfil.fuentes.length === 0)
+            ? [{ id: "legacy", nombre: "Salario principal", monto: salario, frecuencia, moneda: monedaSalario, mensualCRC: salarioMensual, icono: "💼" }]
+            : perfil.fuentes;
+        updatePerfil({ salario, frecuenciaSalario: frecuencia, monedaSalario, salarioMensual, fuentes: primeraFuente, metaAhorro: perfil?.metaAhorro });
         setShowPerfilForm(false);
     };
 
@@ -136,12 +139,25 @@ export default function FinanzasScreen() {
                 disponible={stats.disponible}
                 porcentajeGastado={stats.porcentajeGastado}
                 capacidadAhorro={stats.capacidadAhorro}
+                cantidadFuentes={perfil?.fuentes?.length ?? 1}
                 onEditar={() => {
                     setSalarioInput(String(perfil?.salario ?? ""));
                     setFrecuencia(perfil?.frecuenciaSalario ?? "mensual");
                     setMonedaSalario(perfil?.monedaSalario ?? "CRC");
                     setShowPerfilForm(true);
                 }}
+            />
+
+            {/* Fuentes de ingreso */}
+            <FuentesIngresoSection
+                fuentes={perfil?.fuentes && perfil.fuentes.length > 0
+                    ? perfil.fuentes
+                    : [{ id: "legacy", nombre: "Salario principal", monto: perfil?.salario ?? 0, frecuencia: perfil?.frecuenciaSalario ?? "mensual", moneda: perfil?.monedaSalario ?? "CRC", mensualCRC: stats.salarioMensual, icono: "💼" }]}
+                salarioMensual={stats.salarioMensual}
+                tipoCambio={tipoCambio}
+                onAdd={addFuenteIngreso}
+                onUpdate={updateFuenteIngreso}
+                onDelete={deleteFuenteIngreso}
             />
 
             <AlertasFinancieras alertas={stats.alertas} />

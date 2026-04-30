@@ -1,6 +1,6 @@
 "use client";
 import { create } from "zustand";
-import type { Compromiso, HistorialPago, AppSettings, Space, PerfilFinanciero, Moneda, GastoVariable, GastoVariableEntrada, PeriodoGastoVariable, InvitacionCompartir, MetaProyecto, MetaAporte } from "@/types";
+import type { Compromiso, HistorialPago, AppSettings, Space, PerfilFinanciero, FuenteIngreso, Moneda, FrecuenciaSalario, GastoVariable, GastoVariableEntrada, PeriodoGastoVariable, InvitacionCompartir, MetaProyecto, MetaAporte } from "@/types";
 import { compromisosService, historialService, settingsService, spacesService, gastosVariablesService, gastosVariableEntradasService, invitacionesService, metasService, metaAportesService } from "@/lib/firestore";
 import { calcProximaFecha } from "@/lib/utils";
 
@@ -35,6 +35,9 @@ interface AppStore {
     rechazarInvitacion: (invitacionId: string) => Promise<void>;
 
     updatePerfil: (perfil: PerfilFinanciero) => void;
+    addFuenteIngreso: (f: Omit<FuenteIngreso, "id" | "mensualCRC">) => void;
+    updateFuenteIngreso: (id: string, data: Omit<FuenteIngreso, "id" | "mensualCRC">) => void;
+    deleteFuenteIngreso: (id: string) => void;
     getFinanzasStats: () => {
         salarioMensual: number;
         totalCompromisos: number;
@@ -84,6 +87,15 @@ const calcMensualCRC = (monto: number, frecuencia: string, moneda: Moneda = "CRC
         case "semestral": return montoCRC / 6;
         case "anual": return montoCRC / 12;
         default: return montoCRC;
+    }
+};
+
+const calcFuenteMensualCRC = (monto: number, frecuencia: FrecuenciaSalario, moneda: Moneda, tipoCambio: number): number => {
+    const base = moneda === "USD" ? monto * tipoCambio : monto;
+    switch (frecuencia) {
+        case "quincenal": return base * 2;
+        case "semanal": return base * 4.33;
+        default: return base;
     }
 };
 
@@ -474,12 +486,48 @@ export const useStore = create<AppStore>()((set, get) => ({
         });
     },
 
+    addFuenteIngreso: (data) => {
+        const { settings, tipoCambio, updatePerfil } = get();
+        const perfil = settings.perfil;
+        if (!perfil) return;
+        const mensualCRC = calcFuenteMensualCRC(data.monto, data.frecuencia, data.moneda, tipoCambio);
+        const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+        const nuevaFuente: FuenteIngreso = { ...data, id, mensualCRC };
+        // Migrar fuentes legacy si aún no existen
+        const fuentesExistentes = perfil.fuentes && perfil.fuentes.length > 0
+            ? perfil.fuentes
+            : [{ id: "legacy", nombre: "Salario principal", monto: perfil.salario, frecuencia: perfil.frecuenciaSalario, moneda: perfil.monedaSalario ?? "CRC", mensualCRC: perfil.salarioMensual, icono: "💼" }];
+        const fuentes = [...fuentesExistentes, nuevaFuente];
+        updatePerfil({ ...perfil, fuentes, salarioMensual: fuentes.reduce((s, f) => s + f.mensualCRC, 0) });
+    },
+
+    updateFuenteIngreso: (id, data) => {
+        const { settings, tipoCambio, updatePerfil } = get();
+        const perfil = settings.perfil;
+        if (!perfil || !perfil.fuentes) return;
+        const mensualCRC = calcFuenteMensualCRC(data.monto, data.frecuencia, data.moneda, tipoCambio);
+        const fuentes = perfil.fuentes.map((f) => f.id === id ? { ...f, ...data, mensualCRC } : f);
+        updatePerfil({ ...perfil, fuentes, salarioMensual: fuentes.reduce((s, f) => s + f.mensualCRC, 0) });
+    },
+
+    deleteFuenteIngreso: (id) => {
+        const { settings, updatePerfil } = get();
+        const perfil = settings.perfil;
+        if (!perfil || !perfil.fuentes) return;
+        const fuentes = perfil.fuentes.filter((f) => f.id !== id);
+        updatePerfil({ ...perfil, fuentes, salarioMensual: fuentes.reduce((s, f) => s + f.mensualCRC, 0) });
+    },
+
     getFinanzasStats: () => {
         const { compromisos, settings, tipoCambio, gastosVariables, gastosVariableEntradas } = get();
         const activos = compromisos.filter((c) => c.estado === "activo");
         const perfil = settings.perfil;
+        // Si tiene múltiples fuentes usamos salarioMensual guardado (= suma de fuentes)
+        // Si no, calculamos desde los campos legacy para compatibilidad hacia atrás
         const salarioMensual = perfil
-            ? calcSalarioMensualCRC(perfil.salario, perfil.frecuenciaSalario, perfil.monedaSalario ?? "CRC", tipoCambio)
+            ? (perfil.fuentes && perfil.fuentes.length > 0
+                ? perfil.salarioMensual
+                : calcSalarioMensualCRC(perfil.salario, perfil.frecuenciaSalario, perfil.monedaSalario ?? "CRC", tipoCambio))
             : 0;
         const totalCompromisos = activos.reduce((s, c) => s + calcMensualCRC(c.monto, c.frecuencia, c.moneda, tipoCambio), 0);
 

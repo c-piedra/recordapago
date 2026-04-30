@@ -2,20 +2,21 @@ import { fmt, fmtUSD } from "@/lib/utils";
 import type { Moneda } from "@/types";
 
 interface FinanzasHeroProps {
-    salarioMensual: number;        // siempre en CRC
-    salarioOriginal: number;       // en la moneda original
+    salarioMensual: number;
+    salarioOriginal: number;
     monedaSalario: Moneda;
     tipoCambio: number;
     totalCompromisos: number;
     disponible: number;
     porcentajeGastado: number;
     capacidadAhorro: number;
+    cantidadFuentes?: number;
     onEditar: () => void;
 }
 
 export default function FinanzasHero({
     salarioMensual, salarioOriginal, monedaSalario, tipoCambio,
-    totalCompromisos, disponible, porcentajeGastado, capacidadAhorro, onEditar,
+    totalCompromisos, disponible, porcentajeGastado, capacidadAhorro, cantidadFuentes, onEditar,
 }: FinanzasHeroProps) {
     const porcentaje = Math.min(100, porcentajeGastado);
     const barColor = porcentaje > 70 ? "var(--color-danger)" : porcentaje > 50 ? "var(--color-warning)" : "var(--color-success)";
@@ -37,16 +38,26 @@ export default function FinanzasHero({
 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "var(--space-4)" }}>
                 <div>
-                    <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)", marginBottom: 4 }}>Salario mensual</p>
-                    {monedaSalario === "USD" ? (
-                        <>
+                    <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)", marginBottom: 4 }}>
+                        {cantidadFuentes && cantidadFuentes > 1
+                            ? `Ingresos mensuales · ${cantidadFuentes} fuentes`
+                            : "Ingresos mensuales"}
+                    </p>
+                    {!cantidadFuentes || cantidadFuentes <= 1 ? (
+                        monedaSalario === "USD" ? (
+                            <>
+                                <p style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "var(--text-3xl)", color: "var(--color-text)" }}>
+                                    {fmtUSD(salarioOriginal)}
+                                </p>
+                                <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)", marginTop: 2 }}>
+                                    ≈ {fmt(salarioMensual)} · ₡{tipoCambio.toFixed(0)} × $
+                                </p>
+                            </>
+                        ) : (
                             <p style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "var(--text-3xl)", color: "var(--color-text)" }}>
-                                {fmtUSD(salarioOriginal)}
+                                {fmt(salarioMensual)}
                             </p>
-                            <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-3)", marginTop: 2 }}>
-                                ≈ {fmt(salarioMensual)} · ₡{tipoCambio.toFixed(0)} × $
-                            </p>
-                        </>
+                        )
                     ) : (
                         <p style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "var(--text-3xl)", color: "var(--color-text)" }}>
                             {fmt(salarioMensual)}
